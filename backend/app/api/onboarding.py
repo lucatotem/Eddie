@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.services.confluence_service import confluence_service
 from app.services.config_storage import get_storage
 from app.services.course_processor import course_processor
+from app.services.gemini_service import gemini_service
 from app.models.onboarding_config import (
     OnboardingConfigFile,
     CreateOnboardingRequest,
@@ -104,8 +105,9 @@ async def delete_config(config_id: str):
     if not storage.delete(config_id):
         raise HTTPException(status_code=404, detail="Config not found")
     
-    # Clean up all embeddings and processing data
+    # Clean up all embeddings, processing data, and generated courses
     course_processor.delete_course_data(config_id)
+    gemini_service.delete_generated_course(config_id)
     
     return {"message": "Config deleted successfully"}
 
@@ -286,3 +288,63 @@ async def generate_course_quiz(config_id: str, question_count: int = 5):
         questions=mock_questions[:question_count],
         page_title=config_data["title"]
     )
+
+
+# AI-Generated Course Endpoints
+
+@router.post("/configs/{config_id}/generate-course")
+async def generate_course(config_id: str, background_tasks: BackgroundTasks, num_modules: int = 5):
+    """
+    Generate an AI-powered interactive course from embedded Confluence content
+    Uses Gemini 2.0 Flash Lite to create engaging modules with summaries and takeaways
+    """
+    storage = get_storage()
+    config = storage.get(config_id)
+    
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    
+    # Check if the course has been processed
+    if not course_processor.is_course_processed(config_id):
+        raise HTTPException(
+            status_code=400, 
+            detail="Course has not been processed yet. Please wait for embedding to complete."
+        )
+    
+    # Generate the course in the background
+    def generate_task():
+        try:
+            gemini_service.generate_course_content(
+                course_id=config_id,
+                course_title=config.title,
+                course_description=config.description,
+                num_modules=num_modules
+            )
+        except Exception as e:
+            print(f"Error generating course {config_id}: {e}")
+    
+    background_tasks.add_task(generate_task)
+    
+    return {
+        "message": "Course generation started",
+        "course_id": config_id,
+        "status": "generating"
+    }
+
+
+@router.get("/configs/{config_id}/generated-course")
+async def get_generated_course(config_id: str):
+    """
+    Get the AI-generated course content
+    Returns the complete course with all modules, or 404 if not yet generated
+    """
+    course_data = gemini_service.get_generated_course(config_id)
+    
+    if not course_data:
+        raise HTTPException(
+            status_code=404, 
+            detail="Course has not been generated yet. Use POST /configs/{id}/generate-course first."
+        )
+    
+    return course_data
+
