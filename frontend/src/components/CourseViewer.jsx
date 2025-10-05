@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { onboardingAPI } from '../services/api';
+import Quiz from './Quiz';
 import './CourseViewer.css';
 
 const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
@@ -9,6 +10,7 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(null);
+  const [showQuiz, setShowQuiz] = useState(false);
 
   useEffect(() => {
     loadCourse();
@@ -273,7 +275,7 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
             
             {currentModuleIndex === course.modules.length - 1 ? (
               <button 
-                onClick={() => onStartQuiz && onStartQuiz(configId)}
+                onClick={() => setShowQuiz(true)}
                 className="btn-primary"
               >
                 Take Final Quiz →
@@ -289,6 +291,20 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
           </div>
         </main>
       </div>
+
+      {showQuiz && (
+        <Quiz
+          configId={configId}
+          moduleNumber={null}
+          onClose={() => setShowQuiz(false)}
+          onComplete={(results) => {
+            setShowQuiz(false);
+            if (results.passed && onStartQuiz) {
+              onStartQuiz(configId);
+            }
+          }}
+        />
+      )}
 
       <div className="course-footer">
         <div className="source-info">
