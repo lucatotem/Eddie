@@ -1,20 +1,48 @@
 """
 Vector database service using ChromaDB
 Handles embeddings and semantic search for course content
+Uses Gemini text-embedding-004 for embeddings
 """
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
 from typing import List, Dict, Optional
 import hashlib
+import re
 from pathlib import Path
+from app.config import get_settings
+
+settings = get_settings()
+
+
+def strip_html(html_content: str) -> str:
+    """
+    Strip HTML tags and extract clean text from Confluence HTML
+    """
+    if not html_content:
+        return ""
+    
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', ' ', html_content)
+    
+    # Decode common HTML entities
+    text = text.replace('&nbsp;', ' ')
+    text = text.replace('&lt;', '<')
+    text = text.replace('&gt;', '>')
+    text = text.replace('&amp;', '&')
+    text = text.replace('&quot;', '"')
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text)
+    
+    return text.strip()
 
 
 class VectorStoreService:
     """
     Manages embeddings and vector search for Confluence page content
-    Uses ChromaDB for storage and sentence-transformers for embeddings
+    Uses ChromaDB for storage and Gemini text-embedding-004 for embeddings
     """
     
     def __init__(self, persist_directory: str = "chroma_db"):
@@ -34,11 +62,12 @@ class VectorStoreService:
             )
         )
         
-        # Load the embedding model
-        # Using all-MiniLM-L6-v2: fast, good quality, 384 dimensions
-        print("[VectorStore] Loading embedding model...")
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        print("[VectorStore] Model loaded successfully")
+        # Configure Gemini API
+        if settings.gemini_api_key:
+            genai.configure(api_key=settings.gemini_api_key)
+            print("[VectorStore] Gemini API configured successfully")
+        else:
+            print("[VectorStore] WARNING: No Gemini API key found in settings")
     
     def get_or_create_collection(self, course_id: str):
         """
@@ -53,16 +82,43 @@ class VectorStoreService:
     
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embeddings for a list of text chunks
+        Generate embeddings for a list of text chunks using Gemini
         Returns: List of embedding vectors (each is a list of floats)
         """
         if not texts:
             return []
         
-        print(f"[VectorStore] Generating embeddings for {len(texts)} chunks...")
-        embeddings = self.embedding_model.encode(texts, show_progress_bar=True)
-        # Convert numpy arrays to lists for ChromaDB
-        return [emb.tolist() for emb in embeddings]
+        if not settings.gemini_api_key:
+            raise ValueError("Gemini API key not configured")
+        
+        print(f"[VectorStore] Generating embeddings for {len(texts)} chunks using Gemini...")
+        
+        embeddings = []
+        # Gemini has a batch limit, so we process in batches
+        batch_size = 100
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            print(f"[VectorStore] Processing batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1}")
+            
+            # Generate embeddings for this batch
+            result = genai.embed_content(
+                model="models/text-embedding-004",
+                content=batch,
+                task_type="retrieval_document"  # For storing documents
+            )
+            
+            # Extract embeddings from result
+            if isinstance(result, dict) and 'embedding' in result:
+                # Single text case
+                embeddings.append(result['embedding'])
+            else:
+                # Batch case - result has an 'embeddings' field
+                for embedding in result['embedding']:
+                    embeddings.append(embedding)
+        
+        print(f"[VectorStore] Generated {len(embeddings)} embeddings")
+        return embeddings
     
     def chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
         """
@@ -127,8 +183,11 @@ class VectorStoreService:
         """
         collection = self.get_or_create_collection(course_id)
         
+        # Strip HTML tags from content
+        clean_content = strip_html(page_content)
+        
         # Chunk the content
-        chunks = self.chunk_text(page_content)
+        chunks = self.chunk_text(clean_content)
         
         if not chunks:
             print(f"[VectorStore] No content to embed for page {page_id}")
@@ -182,10 +241,19 @@ class VectorStoreService:
         Returns:
             List of dicts with 'text', 'metadata', and 'distance' keys
         """
+        if not settings.gemini_api_key:
+            raise ValueError("Gemini API key not configured")
+            
         collection = self.get_or_create_collection(course_id)
         
-        # Generate query embedding
-        query_embedding = self.generate_embeddings([query])[0]
+        # Generate query embedding using Gemini
+        result = genai.embed_content(
+            model="models/text-embedding-004",
+            content=query,
+            task_type="retrieval_query"  # For searching/queries
+        )
+        
+        query_embedding = result['embedding']
         
         # Search
         results = collection.query(
