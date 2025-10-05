@@ -1,0 +1,250 @@
+.config-editor {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.config-editor h2 {
+  margin-top: 0;
+  color: #172B4D;
+}
+
+.config-editor h3 {
+  color: #172B4D;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.form-section {
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid #EBECF0;
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+}
+
+.config-editor label {
+  display: block;
+  margin-bottom: 1rem;
+  color: #172B4D;
+  font-weight: 500;
+}
+
+.config-editor input[type="text"],
+.config-editor textarea {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+  border: 2px solid #DFE1E6;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.config-editor input[type="text"]:focus,
+.config-editor textarea:focus {
+  outline: none;
+  border-color: #4C9AFF;
+}
+
+.config-editor textarea {
+  resize: vertical;
+}
+
+/* Emoji and color pickers */
+.picker-row {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.emoji-picker,
+.color-picker {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.emoji-picker button,
+.color-picker button {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #DFE1E6;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.emoji-picker button:hover,
+.color-picker button:hover {
+  transform: scale(1.1);
+  border-color: #4C9AFF;
+}
+
+.emoji-picker button.selected,
+.color-picker button.selected {
+  border-color: #4C9AFF;
+  border-width: 3px;
+}
+
+/* Checkbox labels */
+.checkbox-label {
+  display: flex !important;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #F4F5F7;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-top: 0.25rem;
+  cursor: pointer;
+}
+
+.checkbox-label p {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.9rem;
+  color: #6B778C;
+  font-weight: normal;
+}
+
+.checkbox-label strong {
+  display: block;
+}
+
+/* Page adder */
+.page-adder {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.page-adder input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.page-adder button {
+  padding: 0.5rem 1rem;
+  background: #4C9AFF;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.page-adder button:disabled {
+  background: #DFE1E6;
+  cursor: not-allowed;
+}
+
+/* Linked pages list */
+.linked-pages-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.linked-pages-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #F4F5F7;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.linked-pages-list li span {
+  font-family: monospace;
+  color: #172B4D;
+}
+
+.linked-pages-list button {
+  background: none;
+  border: none;
+  color: #FF5630;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.linked-pages-list button:hover {
+  background: #FFEBE6;
+  border-radius: 4px;
+}
+
+/* Form actions */
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+.form-actions button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.form-actions button.primary {
+  background: #0052CC;
+  color: white;
+}
+
+.form-actions button.primary:hover:not(:disabled) {
+  background: #0065FF;
+}
+
+.form-actions button.primary:disabled {
+  background: #DFE1E6;
+  cursor: not-allowed;
+}
+
+.form-actions button:not(.primary) {
+  background: white;
+  border: 2px solid #DFE1E6;
+  color: #172B4D;
+}
+
+.form-actions button:not(.primary):hover {
+  background: #F4F5F7;
+}
+
+/* Error message */
+.error-message {
+  background: #FFEBE6;
+  border: 1px solid #FF5630;
+  color: #BF2600;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+/* Hint text */
+.hint {
+  font-size: 0.9rem;
+  color: #6B778C;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+}
