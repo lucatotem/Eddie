@@ -1,0 +1,160 @@
+.config-manager {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.config-manager h1 {
+  color: #172B4D;
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: #6B778C;
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.config-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-left: 4px solid #4C9AFF;
+  position: relative;
+}
+
+.config-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+/* Create new card styling */
+.config-card.create-new {
+  border-left-color: #36B37E;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8f5e9 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.config-card.create-new:hover {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+}
+
+.config-card.create-new .card-emoji {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.config-card.create-new h3 {
+  color: #36B37E;
+  margin: 0;
+}
+
+.config-card.create-new p {
+  color: #6B778C;
+  margin: 0.5rem 0 0 0;
+}
+
+/* Card header with emoji and delete button */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.card-emoji {
+  font-size: 2.5rem;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0.25rem 0.5rem;
+  opacity: 0.5;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  opacity: 1;
+  background: #FFEBE6;
+  border-radius: 4px;
+}
+
+.config-card h3 {
+  margin: 0 0 0.5rem 0;
+  color: #172B4D;
+  font-size: 1.2rem;
+}
+
+.card-instructions {
+  color: #6B778C;
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  /* Truncate long text */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.card-meta span {
+  background: #F4F5F7;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  color: #172B4D;
+}
+
+.card-date {
+  color: #97A0AF;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0 0;
+}
+
+/* Error state */
+.error {
+  color: #BF2600;
+  background: #FFEBE6;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.config-manager button {
+  padding: 0.75rem 1.5rem;
+  background: #0052CC;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.config-manager button:hover {
+  background: #0065FF;
+}

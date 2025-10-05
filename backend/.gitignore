@@ -1,0 +1,38 @@
+# Python stuff
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated course data (AI-generated content, don't commit)
+onboarding/courses/
+onboarding/quizzes/
+onboarding/processed/
+onboarding
+
+# Vector database (ChromaDB)
+chroma_db/
