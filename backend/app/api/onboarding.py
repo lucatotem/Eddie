@@ -348,3 +348,111 @@ async def get_generated_course(config_id: str):
     
     return course_data
 
+
+# Quiz Generation Endpoints
+
+class QuizGenerateRequest(BaseModel):
+    """Request to generate a quiz"""
+    module_number: Optional[int] = None  # None = final quiz for entire course
+    num_questions: int = 5
+    difficulty: str = "medium"  # "easy", "medium", or "hard"
+
+
+class QuizSubmission(BaseModel):
+    """User's quiz answers"""
+    answers: List[int]  # List of selected answer indices
+
+
+@router.post("/configs/{config_id}/generate-quiz")
+async def generate_quiz(config_id: str, request: QuizGenerateRequest, background_tasks: BackgroundTasks):
+    """
+    Generate a quiz based on course content
+    Can generate quizzes for individual modules or the entire course
+    """
+    storage = get_storage()
+    config = storage.get(config_id)
+    
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    
+    # Check if course has been generated
+    course_data = gemini_service.get_generated_course(config_id)
+    if not course_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Course has not been generated yet. Generate the course first."
+        )
+    
+    # Generate quiz in background
+    def generate_task():
+        try:
+            gemini_service.generate_quiz(
+                course_id=config_id,
+                module_number=request.module_number,
+                num_questions=request.num_questions,
+                difficulty=request.difficulty
+            )
+        except Exception as e:
+            print(f"Error generating quiz for {config_id}: {e}")
+    
+    background_tasks.add_task(generate_task)
+    
+    quiz_type = f"module {request.module_number}" if request.module_number else "final"
+    return {
+        "message": f"Quiz generation started for {quiz_type}",
+        "course_id": config_id,
+        "module_number": request.module_number,
+        "status": "generating"
+    }
+
+
+@router.get("/configs/{config_id}/quiz")
+async def get_quiz(config_id: str, module_number: Optional[int] = None):
+    """
+    Get a generated quiz (without answers shown)
+    Use module_number query param for module-specific quiz
+    """
+    quiz_data = gemini_service.get_quiz(config_id, module_number)
+    
+    if not quiz_data:
+        quiz_type = f"module {module_number}" if module_number else "final"
+        raise HTTPException(
+            status_code=404,
+            detail=f"Quiz for {quiz_type} not found. Generate it first."
+        )
+    
+    # Return quiz without revealing correct answers
+    return {
+        "course_id": quiz_data["course_id"],
+        "quiz_title": quiz_data["quiz_title"],
+        "module_number": quiz_data.get("module_number"),
+        "difficulty": quiz_data["difficulty"],
+        "total_questions": quiz_data["total_questions"],
+        "questions": [
+            {
+                "question": q["question"],
+                "options": q["options"],
+                "difficulty": q["difficulty"]
+            }
+            for q in quiz_data["questions"]
+        ]
+    }
+
+
+@router.post("/configs/{config_id}/quiz/submit")
+async def submit_quiz(config_id: str, submission: QuizSubmission, module_number: Optional[int] = None):
+    """
+    Submit quiz answers for grading
+    Returns score, feedback, and explanations
+    """
+    try:
+        results = gemini_service.submit_quiz_answers(
+            course_id=config_id,
+            user_answers=submission.answers,
+            module_number=module_number
+        )
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+

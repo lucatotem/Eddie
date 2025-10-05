@@ -243,6 +243,211 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
         course_file = os.path.join("onboarding", "courses", f"{course_id}.json")
         if os.path.exists(course_file):
             os.remove(course_file)
+    
+    def generate_quiz(
+        self,
+        course_id: str,
+        module_number: Optional[int] = None,
+        num_questions: int = 5,
+        difficulty: str = "medium"
+    ) -> Dict[str, Any]:
+        """
+        Generate a quiz based on course content
+        
+        Args:
+            course_id: The ID of the course
+            module_number: Specific module to quiz on (None = entire course)
+            num_questions: Number of questions to generate (default: 5)
+            difficulty: Question difficulty - "easy", "medium", or "hard"
+        
+        Returns:
+            Dictionary with quiz questions and metadata
+        """
+        if not self.model:
+            raise Exception("Gemini API not configured. Please set GEMINI_API_KEY.")
+        
+        # Load the generated course
+        course_data = self.get_generated_course(course_id)
+        if not course_data:
+            raise Exception(f"Course {course_id} has not been generated yet.")
+        
+        # Determine which content to quiz on
+        if module_number is not None:
+            # Quiz on specific module
+            modules = [m for m in course_data["modules"] if m["module_number"] == module_number]
+            if not modules:
+                raise Exception(f"Module {module_number} not found in course.")
+            quiz_content = modules[0]
+            quiz_title = f"{course_data['title']} - {quiz_content['title']} Quiz"
+        else:
+            # Quiz on entire course
+            quiz_content = course_data
+            quiz_title = f"{course_data['title']} - Final Assessment"
+        
+        # Get relevant content from vector store for more context
+        search_query = quiz_content.get("title", course_data["title"])
+        search_results = vector_store.search_similar(
+            course_id=course_id,
+            query_text=search_query,
+            top_k=20
+        )
+        
+        source_content = "\n\n".join([result["text"] for result in search_results[:10]])
+        
+        # Generate quiz questions
+        quiz_prompt = f"""You are creating an assessment quiz for an onboarding course.
+
+Course Title: {course_data['title']}
+Quiz Topic: {quiz_title}
+Difficulty Level: {difficulty}
+
+Content to Quiz On:
+{json.dumps(quiz_content, indent=2)[:3000]}
+
+Additional Source Material:
+{source_content[:2000]}
+
+Create {num_questions} multiple-choice questions that:
+1. Test understanding of key concepts
+2. Are clear and unambiguous
+3. Have 4 answer options each
+4. Include detailed explanations for the correct answer
+5. Match the {difficulty} difficulty level
+6. Cover different aspects of the content
+
+Return ONLY a JSON array with this structure:
+[
+  {{
+    "question": "The question text",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correct_answer": 0,
+    "explanation": "Why this is correct and what concept it tests",
+    "difficulty": "{difficulty}"
+  }}
+]
+
+Do not include any markdown formatting or explanation, just the JSON array."""
+
+        try:
+            response = self.model.generate_content(quiz_prompt)
+            questions = json.loads(response.text.strip())
+        except Exception as e:
+            print(f"Error generating quiz: {e}")
+            # Fallback: simple questions
+            questions = [
+                {
+                    "question": f"What is covered in {course_data['title']}?",
+                    "options": [
+                        "Important concepts for new employees",
+                        "Random information",
+                        "Unrelated topics",
+                        "None of the above"
+                    ],
+                    "correct_answer": 0,
+                    "explanation": "This course covers essential onboarding information.",
+                    "difficulty": difficulty
+                }
+            ]
+        
+        quiz_data = {
+            "course_id": course_id,
+            "quiz_title": quiz_title,
+            "module_number": module_number,
+            "difficulty": difficulty,
+            "total_questions": len(questions),
+            "questions": questions
+        }
+        
+        # Save the quiz
+        self._save_quiz(course_id, module_number, quiz_data)
+        
+        return quiz_data
+    
+    def _save_quiz(self, course_id: str, module_number: Optional[int], quiz_data: Dict[str, Any]):
+        """Save generated quiz to a JSON file"""
+        quizzes_dir = os.path.join("onboarding", "quizzes")
+        os.makedirs(quizzes_dir, exist_ok=True)
+        
+        if module_number is not None:
+            quiz_file = os.path.join(quizzes_dir, f"{course_id}_module_{module_number}.json")
+        else:
+            quiz_file = os.path.join(quizzes_dir, f"{course_id}_final.json")
+        
+        with open(quiz_file, "w", encoding="utf-8") as f:
+            json.dump(quiz_data, f, indent=2, ensure_ascii=False)
+    
+    def get_quiz(self, course_id: str, module_number: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Load a previously generated quiz"""
+        quizzes_dir = os.path.join("onboarding", "quizzes")
+        
+        if module_number is not None:
+            quiz_file = os.path.join(quizzes_dir, f"{course_id}_module_{module_number}.json")
+        else:
+            quiz_file = os.path.join(quizzes_dir, f"{course_id}_final.json")
+        
+        if not os.path.exists(quiz_file):
+            return None
+        
+        with open(quiz_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    
+    def submit_quiz_answers(
+        self,
+        course_id: str,
+        user_answers: List[int],
+        module_number: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Grade a quiz submission
+        
+        Args:
+            course_id: The course ID
+            user_answers: List of answer indices chosen by the user
+            module_number: Which module quiz (None = final quiz)
+        
+        Returns:
+            Grading results with score, feedback, and detailed explanations
+        """
+        quiz_data = self.get_quiz(course_id, module_number)
+        if not quiz_data:
+            raise Exception("Quiz not found. Generate it first.")
+        
+        questions = quiz_data["questions"]
+        if len(user_answers) != len(questions):
+            raise Exception(f"Expected {len(questions)} answers, got {len(user_answers)}")
+        
+        # Grade each answer
+        results = []
+        correct_count = 0
+        
+        for i, (question, user_answer) in enumerate(zip(questions, user_answers)):
+            correct = user_answer == question["correct_answer"]
+            if correct:
+                correct_count += 1
+            
+            results.append({
+                "question_number": i + 1,
+                "question": question["question"],
+                "user_answer": user_answer,
+                "correct_answer": question["correct_answer"],
+                "is_correct": correct,
+                "explanation": question["explanation"],
+                "selected_option": question["options"][user_answer] if 0 <= user_answer < len(question["options"]) else "Invalid",
+                "correct_option": question["options"][question["correct_answer"]]
+            })
+        
+        score_percentage = (correct_count / len(questions)) * 100
+        
+        return {
+            "course_id": course_id,
+            "module_number": module_number,
+            "quiz_title": quiz_data["quiz_title"],
+            "total_questions": len(questions),
+            "correct_answers": correct_count,
+            "score_percentage": round(score_percentage, 1),
+            "passed": score_percentage >= 70,  # 70% passing grade
+            "results": results
+        }
 
 
 # Singleton instance
