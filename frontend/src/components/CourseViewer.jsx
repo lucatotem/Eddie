@@ -11,9 +11,12 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
   const [generating, setGenerating] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(null);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
 
   useEffect(() => {
     loadCourse();
+    checkForUpdates();
   }, [configId]);
 
   const loadCourse = async () => {
@@ -74,6 +77,32 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
       console.error('Error generating course:', err);
       setError(err.response?.data?.detail || 'Failed to generate course');
       setGenerating(false);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    try {
+      setCheckingUpdates(true);
+      const status = await onboardingAPI.checkForUpdates(configId);
+      setUpdateStatus(status);
+      setCheckingUpdates(false);
+    } catch (err) {
+      console.error('Error checking for updates:', err);
+      setCheckingUpdates(false);
+    }
+  };
+
+  const handleReprocess = async () => {
+    try {
+      await onboardingAPI.reprocessCourse(configId);
+      alert('Course re-processing started. This may take a few moments...');
+      // Refresh status after a delay
+      setTimeout(() => {
+        checkForUpdates();
+      }, 5000);
+    } catch (err) {
+      console.error('Error reprocessing:', err);
+      alert('Failed to start re-processing.');
     }
   };
 
@@ -194,6 +223,21 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
         </div>
         <button onClick={onClose} className="btn-close">×</button>
       </div>
+
+      {updateStatus && updateStatus.needs_update && (
+        <div className="update-banner">
+          <div className="update-content">
+            <span className="update-icon">🔄</span>
+            <div className="update-text">
+              <strong>Content Updates Available</strong>
+              <p>{updateStatus.reason} - {updateStatus.total_changes} change(s) detected</p>
+            </div>
+          </div>
+          <button onClick={handleReprocess} className="btn-update">
+            Re-process Course
+          </button>
+        </div>
+      )}
 
       <div className="course-progress">
         <div className="progress-bar">

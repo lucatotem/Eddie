@@ -125,6 +125,41 @@ async def get_processing_status(config_id: str):
         }
     return status
 
+@router.get("/configs/{config_id}/check-updates")
+async def check_for_updates(config_id: str):
+    """
+    Check if any Confluence pages have been updated since last processing
+    Returns details about new, deleted, or modified pages
+    """
+    storage = get_storage()
+    config = storage.get(config_id)
+    
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    
+    update_status = course_processor.check_for_updates(config_id, config)
+    return update_status
+
+@router.post("/configs/{config_id}/reprocess")
+async def reprocess_course(config_id: str, background_tasks: BackgroundTasks):
+    """
+    Manually trigger re-processing of a course
+    Useful when you know pages have been updated
+    """
+    storage = get_storage()
+    config = storage.get(config_id)
+    
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    
+    # Trigger re-processing in background
+    background_tasks.add_task(course_processor.process_course, config)
+    
+    return {
+        "message": "Course re-processing started",
+        "course_id": config_id
+    }
+
 
 @router.get("/course/{config_id}", response_model=OnboardingCourse)
 async def get_onboarding_course(config_id: str):

@@ -84,8 +84,10 @@ class CourseProcessor:
                 page_title = page_data.get("title", "Untitled")
                 page_body = page_data.get("body", {}).get("storage", {}).get("value", "")
                 page_url = f"{confluence_service.base_url.replace('/rest/api', '')}{page_data.get('_links', {}).get('webui', '')}"
+                page_version = page_data.get("version", {}).get("number", 0)
                 
                 print(f"   Title: {page_title}")
+                print(f"   Version: {page_version}")
                 print(f"   Content length: {len(page_body)} chars")
                 
                 # Embed the page content
@@ -98,10 +100,11 @@ class CourseProcessor:
                 )
                 
                 processed_pages.append({
-                    "id": page_id,
+                    "page_id": page_id,
                     "title": page_title,
                     "url": page_url,
-                    "content_length": len(page_body)
+                    "content_length": len(page_body),
+                    "version": page_version
                 })
                 
                 print(f"   ✓ Successfully embedded")
@@ -171,6 +174,105 @@ class CourseProcessor:
             result_file.unlink()
         
         print(f"[CourseProcessor] ✓ Deleted course data")
+    
+    def check_for_updates(self, course_id: str, config: OnboardingConfigFile) -> Dict:
+        """
+        Check if any Confluence pages have been updated since last processing
+        
+        Args:
+            course_id: The course ID
+            config: The onboarding configuration
+            
+        Returns:
+            Dict with update status and details
+        """
+        print(f"[CourseProcessor] Checking for updates: {course_id}")
+        
+        # Get processing status
+        status = self.get_processing_status(course_id)
+        if not status:
+            return {
+                "needs_update": True,
+                "reason": "Course has never been processed",
+                "changed_pages": [],
+                "new_pages": [],
+                "deleted_pages": []
+            }
+        
+        # Get current page list
+        page_ids = config.linked_pages.copy()
+        if config.settings.folder_recursion:
+            expanded_ids = set()
+            for page_id in config.linked_pages:
+                try:
+                    if confluence_service.is_page_a_folder(page_id):
+                        child_ids = confluence_service.get_child_pages(page_id, recursive=True)
+                        expanded_ids.update(child_ids)
+                    else:
+                        expanded_ids.add(page_id)
+                except Exception as e:
+                    print(f"   Error expanding {page_id}: {e}")
+            page_ids = list(expanded_ids)
+        
+        # Compare with previously processed pages
+        processed_page_ids = {p["page_id"] for p in status.get("processed_pages", [])}
+        current_page_ids = set(page_ids)
+        
+        new_pages = current_page_ids - processed_page_ids
+        deleted_pages = processed_page_ids - current_page_ids
+        potentially_changed = current_page_ids & processed_page_ids
+        
+        # Check versions for potentially changed pages
+        changed_pages = []
+        for page_id in potentially_changed:
+            try:
+                page = confluence_service.get_page_by_id(page_id)
+                if page:
+                    current_version = page.get("version", {}).get("number", 0)
+                    
+                    # Find the stored version
+                    stored_page = next(
+                        (p for p in status.get("processed_pages", []) if p["page_id"] == page_id),
+                        None
+                    )
+                    
+                    if stored_page:
+                        stored_version = stored_page.get("version", 0)
+                        if current_version > stored_version:
+                            changed_pages.append({
+                                "page_id": page_id,
+                                "title": page.get("title", "Unknown"),
+                                "old_version": stored_version,
+                                "new_version": current_version
+                            })
+            except Exception as e:
+                print(f"   Error checking page {page_id}: {e}")
+        
+        needs_update = bool(new_pages or deleted_pages or changed_pages)
+        
+        return {
+            "needs_update": needs_update,
+            "reason": self._get_update_reason(new_pages, deleted_pages, changed_pages),
+            "new_pages": list(new_pages),
+            "deleted_pages": list(deleted_pages),
+            "changed_pages": changed_pages,
+            "total_changes": len(new_pages) + len(deleted_pages) + len(changed_pages)
+        }
+    
+    def _get_update_reason(self, new_pages: set, deleted_pages: set, changed_pages: List) -> str:
+        """Generate a human-readable update reason"""
+        reasons = []
+        if new_pages:
+            reasons.append(f"{len(new_pages)} new page(s)")
+        if deleted_pages:
+            reasons.append(f"{len(deleted_pages)} deleted page(s)")
+        if changed_pages:
+            reasons.append(f"{len(changed_pages)} updated page(s)")
+        
+        if not reasons:
+            return "No changes detected"
+        
+        return ", ".join(reasons)
 
 
 # Singleton instance

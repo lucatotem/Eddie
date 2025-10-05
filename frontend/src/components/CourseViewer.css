@@ -57,6 +57,68 @@
   color: #333;
 }
 
+/* Update Banner */
+.update-banner {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border-bottom: 1px solid #ffb74d;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 100px;
+    opacity: 1;
+  }
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.update-icon {
+  font-size: 1.5rem;
+}
+
+.update-text strong {
+  display: block;
+  color: #e65100;
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+}
+
+.update-text p {
+  margin: 0;
+  color: #bf360c;
+  font-size: 0.875rem;
+}
+
+.btn-update {
+  padding: 0.625rem 1.25rem;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-update:hover {
+  background: #f57c00;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
 /* Progress */
 .course-progress {
   padding: 1.5rem 2rem;

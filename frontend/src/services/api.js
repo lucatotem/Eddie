@@ -64,6 +64,16 @@ export const onboardingAPI = {
     return response.data;
   },
 
+  checkForUpdates: async (configId) => {
+    const response = await api.get(`/api/onboarding/configs/${configId}/check-updates`);
+    return response.data;
+  },
+
+  reprocessCourse: async (configId) => {
+    const response = await api.post(`/api/onboarding/configs/${configId}/reprocess`);
+    return response.data;
+  },
+
   generateCourse: async (configId, numModules = 5) => {
     const response = await api.post(`/api/onboarding/configs/${configId}/generate-course`, null, {
       params: { num_modules: numModules }
