@@ -8,6 +8,8 @@ from app.config import get_settings
 from app.services.vector_store import vector_store
 import json
 import os
+import time
+import re
 
 class GeminiService:
     def __init__(self):
@@ -16,14 +18,70 @@ class GeminiService:
         self._initialize_model()
     
     def _initialize_model(self):
-        """Initialize the Gemini 2.0 Flash Lite model"""
+        """Initialize the Gemini 2.5 Pro model"""
         if not self.settings.gemini_api_key:
             print("Warning: GEMINI_API_KEY not set. AI generation will not work.")
             return
         
-        genai.configure(api_key=self.settings.gemini_api_key)
-        # Use Gemini 2.0 Flash Lite for fast, efficient generation
-        self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        try:
+            genai.configure(api_key=self.settings.gemini_api_key)
+            # Use Gemini 2.5 Pro for high-quality generation
+            self.model = genai.GenerativeModel('gemini-2.5-pro')
+            print("[Gemini] Model initialized: gemini-2.5-pro")
+        except Exception as e:
+            print(f"[Gemini] Error initializing model: {e}")
+            self.model = None
+    
+    def _call_gemini_with_retry(self, prompt: str, max_retries: int = 3) -> Optional[str]:
+        """
+        Call Gemini API with retry logic and rate limiting
+        Returns the response text or None if all retries fail
+        """
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # Exponential backoff: 2s, 4s, 8s
+                    wait_time = 2 ** attempt
+                    print(f"[Gemini] Retry {attempt + 1}/{max_retries}, waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                
+                response = self.model.generate_content(prompt)
+                
+                if not response or not hasattr(response, 'text'):
+                    print(f"[Gemini] Empty response on attempt {attempt + 1}")
+                    continue
+                    
+                return response.text
+                
+            except Exception as e:
+                print(f"[Gemini] Error on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt == max_retries - 1:
+                    return None
+        
+        return None
+    
+    def _extract_json_from_response(self, response_text: str) -> Optional[Any]:
+        """
+        Extract JSON from Gemini response, handling markdown code blocks
+        """
+        if not response_text:
+            return None
+        
+        text = response_text.strip()
+        
+        # Remove markdown code blocks
+        if '```' in text:
+            # Find JSON between code blocks
+            match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
+            if match:
+                text = match.group(1).strip()
+        
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            print(f"[Gemini] JSON decode error: {e}")
+            print(f"[Gemini] Response preview: {text[:200]}...")
+            return None
     
     def generate_course_content(
         self, 
@@ -52,8 +110,8 @@ class GeminiService:
         # We'll use the course description as a query to find relevant content
         search_results = vector_store.search_similar(
             course_id=course_id,
-            query_text=course_description or course_title,
-            top_k=50  # Get more chunks to have comprehensive coverage
+            query=course_description or course_title,
+            n_results=50  # Get more chunks to have comprehensive coverage
         )
         
         if not search_results:
@@ -101,22 +159,37 @@ Return ONLY a JSON array with this structure:
 
 Do not include any markdown formatting or explanation, just the JSON array."""
 
-        try:
-            response = self.model.generate_content(module_breakdown_prompt)
-            # Parse the JSON response
-            module_structure = json.loads(response.text.strip())
-        except Exception as e:
-            print(f"Error generating module structure: {e}")
-            # Fallback: create simple modules
-            module_structure = [
-                {
-                    "module_number": i + 1,
-                    "title": f"Module {i + 1}",
-                    "description": f"Part {i + 1} of {course_title}",
-                    "topics": []
-                }
-                for i in range(num_modules)
-            ]
+        response_text = self._call_gemini_with_retry(module_breakdown_prompt)
+        module_structure = None
+        
+        if response_text:
+            module_structure = self._extract_json_from_response(response_text)
+        
+        if not module_structure:
+            print(f"[Gemini] Failed to generate module structure, using intelligent fallback")
+            # Intelligent fallback: distribute pages across modules
+            pages_list = list(pages_content.items())
+            pages_per_module = max(1, len(pages_list) // num_modules)
+            
+            module_structure = []
+            for i in range(num_modules):
+                start_idx = i * pages_per_module
+                end_idx = start_idx + pages_per_module if i < num_modules - 1 else len(pages_list)
+                module_pages = pages_list[start_idx:end_idx]
+                
+                # Use actual page titles for module titles
+                if module_pages:
+                    first_page_title = module_pages[0][1]["title"]
+                    module_structure.append({
+                        "module_number": i + 1,
+                        "title": first_page_title,
+                        "description": f"Learn about {first_page_title.lower()}",
+                        "topics": [page[1]["title"] for page in module_pages]
+                    })
+        
+        # Add delay to respect free tier quota (2 requests per minute)
+        print("[Gemini] Waiting 35 seconds to respect API rate limit...")
+        time.sleep(35)
         
         # Step 4: Generate detailed content for each module
         modules = []
@@ -165,52 +238,88 @@ Do not include any markdown formatting or explanation, just the JSON array."""
         module_query = f"{module_info['title']} {module_info['description']}"
         search_results = vector_store.search_similar(
             course_id=course_id,
-            query_text=module_query,
-            top_k=10  # Top 10 most relevant chunks for this module
+            query=module_query,
+            n_results=10  # Top 10 most relevant chunks for this module
         )
         
         # Combine relevant chunks
         relevant_content = "\n\n".join([result["text"] for result in search_results])
         
         # Generate engaging module content
-        content_prompt = f"""You are creating engaging onboarding content for employees.
+        content_prompt = f"""You are creating onboarding content based on existing documentation.
 
 Module Title: {module_info['title']}
 Module Description: {module_info['description']}
-Topics to Cover: {', '.join(module_info.get('topics', []))}
 
-Source Material:
-{relevant_content[:4000]}  # Limit to avoid token overflow
+SOURCE DOCUMENTATION (use this as your PRIMARY source):
+{relevant_content[:5000]}
 
-Create an engaging, easy-to-understand module that:
-1. Starts with a brief overview (2-3 sentences)
-2. Explains key concepts clearly
-3. Uses practical examples
-4. Includes actionable takeaways
-5. Is written in a friendly, conversational tone
+IMPORTANT: 
+- Base your content DIRECTLY on the source documentation above
+- Quote and reference specific details from the source
+- DO NOT add generic information not found in the source
+- Keep the technical accuracy of the original documentation
+- Make it readable and well-organized, but stay faithful to the source
+
+Create a well-structured module that:
+1. Provides a brief overview based on the source material
+2. Presents the key information from the documentation clearly
+3. Uses actual examples from the source when available
+4. Highlights important takeaways from the documentation
 
 Return ONLY a JSON object with this structure:
 {{
-  "overview": "Brief introduction to the module",
-  "content": "Main content in markdown format",
-  "key_points": ["point 1", "point 2", "point 3"],
-  "takeaways": ["takeaway 1", "takeaway 2"]
+  "overview": "Brief introduction based on source material",
+  "content": "Main content in markdown format, BASED ON SOURCE DOCUMENTATION",
+  "key_points": ["actual point 1 from source", "actual point 2 from source", "actual point 3 from source"],
+  "takeaways": ["actual takeaway 1 from source", "actual takeaway 2 from source"]
 }}
 
 Do not include any markdown formatting around the JSON, just the JSON object."""
 
-        try:
-            response = self.model.generate_content(content_prompt)
-            module_content = json.loads(response.text.strip())
-        except Exception as e:
-            print(f"Error generating module content: {e}")
-            # Fallback content
+        response_text = self._call_gemini_with_retry(content_prompt)
+        module_content = None
+        
+        if response_text:
+            module_content = self._extract_json_from_response(response_text)
+        
+        if not module_content:
+            print(f"[Gemini] Failed to generate module content, using source material")
+            # Better fallback: use actual source content intelligently
+            # Take complete chunks, not truncated text
+            chunks_to_use = []
+            total_length = 0
+            max_length = 3000
+            
+            for result in search_results:
+                chunk = result.get("text", "")
+                if total_length + len(chunk) <= max_length:
+                    chunks_to_use.append(chunk)
+                    total_length += len(chunk)
+                else:
+                    break
+            
+            # Format the content nicely
+            formatted_content = "\n\n".join(chunks_to_use)
+            
+            # Extract key points from topics
+            topics = module_info.get("topics", [])
+            key_points = topics[:5] if topics else ["Review the documentation for detailed information"]
+            
             module_content = {
                 "overview": module_info["description"],
-                "content": relevant_content[:1000],
-                "key_points": module_info.get("topics", []),
-                "takeaways": []
+                "content": formatted_content if formatted_content else "Please refer to the source documentation for detailed information.",
+                "key_points": key_points,
+                "takeaways": [
+                    f"Understanding {module_info['title']}",
+                    "Review the detailed content above",
+                    "Apply these concepts in your work"
+                ]
             }
+        
+        # Add delay to respect free tier quota (2 requests per minute)
+        print("[Gemini] Waiting 35 seconds to respect API rate limit...")
+        time.sleep(35)
         
         return {
             "module_number": module_info["module_number"],
@@ -288,8 +397,8 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
         search_query = quiz_content.get("title", course_data["title"])
         search_results = vector_store.search_similar(
             course_id=course_id,
-            query_text=search_query,
-            top_k=20
+            query=search_query,
+            n_results=20
         )
         
         source_content = "\n\n".join([result["text"] for result in search_results[:10]])
@@ -328,26 +437,48 @@ Return ONLY a JSON array with this structure:
 
 Do not include any markdown formatting or explanation, just the JSON array."""
 
-        try:
-            response = self.model.generate_content(quiz_prompt)
-            questions = json.loads(response.text.strip())
-        except Exception as e:
-            print(f"Error generating quiz: {e}")
-            # Fallback: simple questions
-            questions = [
-                {
-                    "question": f"What is covered in {course_data['title']}?",
+        response_text = self._call_gemini_with_retry(quiz_prompt)
+        questions = None
+        
+        if response_text:
+            questions = self._extract_json_from_response(response_text)
+        
+        if not questions:
+            print(f"[Gemini] Failed to generate quiz, using source-based fallback")
+            # Better fallback: create questions from source content
+            content_snippets = source_content[:1000].split('. ')[:num_questions]
+            
+            questions = []
+            for i, snippet in enumerate(content_snippets):
+                if len(snippet) < 20:  # Skip very short snippets
+                    continue
+                questions.append({
+                    "question": f"According to the course material: {snippet[:100]}?",
                     "options": [
-                        "Important concepts for new employees",
-                        "Random information",
-                        "Unrelated topics",
+                        "True - this is covered in the material",
+                        "False - this is not mentioned",
+                        "Partially true",
+                        "Not applicable"
+                    ],
+                    "correct_answer": 0,
+                    "explanation": "This information is directly from the course content.",
+                    "difficulty": difficulty
+                })
+            
+            # Ensure we have at least one question
+            if not questions:
+                questions = [{
+                    "question": f"What does this course cover about {course_data['title']}?",
+                    "options": [
+                        "Key concepts and practical knowledge",
+                        "Unrelated information",
+                        "Random topics",
                         "None of the above"
                     ],
                     "correct_answer": 0,
-                    "explanation": "This course covers essential onboarding information.",
+                    "explanation": "This course provides essential onboarding knowledge.",
                     "difficulty": difficulty
-                }
-            ]
+                }]
         
         quiz_data = {
             "course_id": course_id,

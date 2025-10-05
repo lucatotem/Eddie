@@ -6,6 +6,7 @@ Handles embedding Confluence pages and generating course structure
 from typing import List, Dict, Optional
 from app.services.confluence_service import confluence_service
 from app.services.vector_store import vector_store
+from app.services.progress_tracker import progress_tracker
 from app.models.onboarding_config import OnboardingConfigFile
 import json
 from pathlib import Path
@@ -30,115 +31,160 @@ class CourseProcessor:
         Returns:
             Dict with processing status and page count
         """
-        print(f"\n[CourseProcessor] Processing course: {config.name} ({config.id})")
+        task_id = f"process_{config.id}"
         
-        # Step 1: Fetch all Confluence pages
-        page_ids = config.linked_pages.copy()
-        
-        # Expand folders if enabled
-        if config.settings.folder_recursion:
-            print("[CourseProcessor] Folder recursion enabled, expanding...")
-            expanded_ids = set()
-            for page_id in config.linked_pages:
-                try:
-                    if confluence_service.is_page_a_folder(page_id):
-                        child_ids = confluence_service.get_child_pages(page_id, recursive=True)
-                        expanded_ids.update(child_ids)
-                        print(f"   Found {len(child_ids)} child pages for {page_id}")
-                    else:
+        try:
+            # Initialize progress tracking
+            progress_tracker.start_task(
+                task_id=task_id,
+                total_steps=5,
+                description=f"Processing course: {config.name}"
+            )
+            
+            print(f"\n[CourseProcessor] Processing course: {config.name} ({config.id})")
+            
+            # Step 1: Fetch all Confluence pages
+            progress_tracker.update_step(task_id, 1, "Fetching Confluence pages", "Retrieving page list...")
+            page_ids = config.linked_pages.copy()
+            
+            # Expand folders if enabled
+            if config.settings.folder_recursion:
+                print("[CourseProcessor] Folder recursion enabled, expanding...")
+                progress_tracker.add_log(task_id, "Folder recursion enabled, expanding child pages...")
+                expanded_ids = set()
+                for page_id in config.linked_pages:
+                    try:
+                        if confluence_service.is_page_a_folder(page_id):
+                            child_ids = confluence_service.get_child_pages(page_id, recursive=True)
+                            expanded_ids.update(child_ids)
+                            msg = f"Found {len(child_ids)} child pages for {page_id}"
+                            print(f"   {msg}")
+                            progress_tracker.add_log(task_id, msg)
+                        else:
+                            expanded_ids.add(page_id)
+                    except Exception as e:
+                        msg = f"Warning: Could not expand {page_id}: {e}"
+                        print(f"   {msg}")
+                        progress_tracker.add_log(task_id, msg, "warning")
                         expanded_ids.add(page_id)
+                page_ids = list(expanded_ids)
+            
+            progress_tracker.add_log(task_id, f"Total pages to process: {len(page_ids)}")
+            print(f"[CourseProcessor] Total pages to process: {len(page_ids)}")
+            
+            # Step 2: Clear existing embeddings for this course
+            progress_tracker.update_step(task_id, 2, "Clearing old embeddings", "Removing outdated content...")
+            print("[CourseProcessor] Clearing old embeddings...")
+            stored_page_ids = vector_store.get_all_page_ids(config.id)
+            for old_page_id in stored_page_ids:
+                if old_page_id not in page_ids:
+                    # Page was removed from course
+                    vector_store.delete_page_content(config.id, old_page_id)
+                    progress_tracker.add_log(task_id, f"Removed old page: {old_page_id}")
+            
+            # Step 3: Fetch and embed each page
+            progress_tracker.update_step(task_id, 3, "Fetching and embedding pages", f"Processing {len(page_ids)} pages...")
+            processed_pages = []
+            failed_pages = []
+            
+            for i, page_id in enumerate(page_ids, 1):
+                try:
+                    msg = f"Processing page {i}/{len(page_ids)}: {page_id}"
+                    print(f"\n[CourseProcessor] [{i}/{len(page_ids)}] Processing page {page_id}...")
+                    progress_tracker.add_log(task_id, msg)
+                    
+                    # Fetch page from Confluence
+                    page_data = confluence_service.get_page_by_id(page_id)
+                    
+                    if not page_data:
+                        msg = f"Page {page_id} not found"
+                        print(f"   Failed: Page not found")
+                        progress_tracker.add_log(task_id, msg, "error")
+                        failed_pages.append({
+                            "id": page_id,
+                            "error": "Page not found or no access"
+                        })
+                        continue
+                    
+                    page_title = page_data.get("title", "Untitled")
+                    page_body = page_data.get("body", {}).get("storage", {}).get("value", "")
+                    page_url = f"{confluence_service.base_url.replace('/rest/api', '')}{page_data.get('_links', {}).get('webui', '')}"
+                    page_version = page_data.get("version", {}).get("number", 0)
+                    
+                    print(f"   Title: {page_title}")
+                    print(f"   Version: {page_version}")
+                    print(f"   Content length: {len(page_body)} chars")
+                    progress_tracker.add_log(task_id, f"✓ Fetched '{page_title}' ({len(page_body)} chars)")
+                    
+                    # Embed the page content
+                    progress_tracker.add_log(task_id, f"Generating embeddings for '{page_title}'...")
+                    vector_store.add_page_content(
+                        course_id=config.id,
+                        page_id=page_id,
+                        page_title=page_title,
+                        page_content=page_body,
+                        page_url=page_url
+                    )
+                    
+                    processed_pages.append({
+                        "page_id": page_id,
+                        "title": page_title,
+                        "url": page_url,
+                        "content_length": len(page_body),
+                        "version": page_version
+                    })
+                    
+                    progress_tracker.add_log(task_id, f"✓ Successfully embedded '{page_title}'")
+                    print(f"   ✓ Successfully embedded")
+                    
                 except Exception as e:
-                    print(f"   Warning: Could not expand {page_id}: {e}")
-                    expanded_ids.add(page_id)
-            page_ids = list(expanded_ids)
-        
-        print(f"[CourseProcessor] Total pages to process: {len(page_ids)}")
-        
-        # Step 2: Clear existing embeddings for this course
-        print("[CourseProcessor] Clearing old embeddings...")
-        stored_page_ids = vector_store.get_all_page_ids(config.id)
-        for old_page_id in stored_page_ids:
-            if old_page_id not in page_ids:
-                # Page was removed from course
-                vector_store.delete_page_content(config.id, old_page_id)
-        
-        # Step 3: Fetch and embed each page
-        processed_pages = []
-        failed_pages = []
-        
-        for i, page_id in enumerate(page_ids, 1):
-            try:
-                print(f"\n[CourseProcessor] [{i}/{len(page_ids)}] Processing page {page_id}...")
-                
-                # Fetch page from Confluence
-                page_data = confluence_service.get_page_by_id(page_id)
-                
-                if not page_data:
-                    print(f"   Failed: Page not found")
+                    import traceback
+                    error_detail = traceback.format_exc()
+                    msg = f"Error processing page {page_id}: {str(e)}"
+                    print(f"   ✗ Error: {e}")
+                    print(f"   ✗ Traceback:\n{error_detail}")
+                    progress_tracker.add_log(task_id, msg, "error")
                     failed_pages.append({
                         "id": page_id,
-                        "error": "Page not found or no access"
+                        "error": str(e),
+                        "traceback": error_detail
                     })
-                    continue
-                
-                page_title = page_data.get("title", "Untitled")
-                page_body = page_data.get("body", {}).get("storage", {}).get("value", "")
-                page_url = f"{confluence_service.base_url.replace('/rest/api', '')}{page_data.get('_links', {}).get('webui', '')}"
-                page_version = page_data.get("version", {}).get("number", 0)
-                
-                print(f"   Title: {page_title}")
-                print(f"   Version: {page_version}")
-                print(f"   Content length: {len(page_body)} chars")
-                
-                # Embed the page content
-                vector_store.add_page_content(
-                    course_id=config.id,
-                    page_id=page_id,
-                    page_title=page_title,
-                    page_content=page_body,
-                    page_url=page_url
-                )
-                
-                processed_pages.append({
-                    "page_id": page_id,
-                    "title": page_title,
-                    "url": page_url,
-                    "content_length": len(page_body),
-                    "version": page_version
-                })
-                
-                print(f"   ✓ Successfully embedded")
-                
-            except Exception as e:
-                print(f"   ✗ Error: {e}")
-                failed_pages.append({
-                    "id": page_id,
-                    "error": str(e)
-                })
-        
-        # Step 4: Store processing metadata
-        processing_result = {
-            "course_id": config.id,
-            "course_name": config.name,
-            "total_pages": len(page_ids),
-            "processed_pages": len(processed_pages),
-            "failed_pages": len(failed_pages),
-            "pages": processed_pages,
-            "failures": failed_pages,
-            "embeddings_generated": True,
-            "ai_course_generated": False  # Will be set to True in task 4
-        }
-        
-        # Save processing result
-        result_file = self.processed_courses_dir / f"{config.id}.json"
-        with open(result_file, "w", encoding="utf-8") as f:
-            json.dump(processing_result, f, indent=2)
-        
-        print(f"\n[CourseProcessor] ✅ Course processing complete!")
-        print(f"   Processed: {len(processed_pages)}/{len(page_ids)} pages")
-        print(f"   Failed: {len(failed_pages)} pages")
-        
-        return processing_result
+            
+            # Step 4: Generating statistics
+            progress_tracker.update_step(task_id, 4, "Generating statistics", "Calculating processing results...")
+            
+            # Step 5: Store processing metadata
+            progress_tracker.update_step(task_id, 5, "Saving results", "Storing processing metadata...")
+            processing_result = {
+                "course_id": config.id,
+                "course_name": config.name,
+                "total_pages": len(page_ids),
+                "processed_pages": len(processed_pages),
+                "failed_pages": len(failed_pages),
+                "pages": processed_pages,
+                "failures": failed_pages,
+                "embeddings_generated": True,
+                "ai_course_generated": False  # Will be set to True in task 4
+            }
+            
+            # Save processing result
+            result_file = self.processed_courses_dir / f"{config.id}.json"
+            with open(result_file, "w", encoding="utf-8") as f:
+                json.dump(processing_result, f, indent=2)
+            
+            print(f"\n[CourseProcessor] ✅ Course processing complete!")
+            print(f"   Processed: {len(processed_pages)}/{len(page_ids)} pages")
+            print(f"   Failed: {len(failed_pages)} pages")
+            
+            # Mark task as complete
+            progress_tracker.complete_task(task_id, processing_result)
+            
+            return processing_result
+            
+        except Exception as e:
+            # Mark task as failed
+            progress_tracker.fail_task(task_id, str(e))
+            raise
     
     def get_processing_status(self, course_id: str) -> Optional[Dict]:
         """

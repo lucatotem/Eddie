@@ -64,6 +64,11 @@ export const onboardingAPI = {
     return response.data;
   },
 
+  getProcessingProgress: async (configId) => {
+    const response = await api.get(`/api/onboarding/configs/${configId}/progress`);
+    return response.data;
+  },
+
   checkForUpdates: async (configId) => {
     const response = await api.get(`/api/onboarding/configs/${configId}/check-updates`);
     return response.data;

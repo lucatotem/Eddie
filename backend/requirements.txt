@@ -8,7 +8,7 @@ pydantic-settings==2.1.0
 requests==2.31.0
 
 # Vector database and AI
-chromadb==0.4.22
+chromadb==0.5.23
 google-generativeai==0.3.2
 
 # CORS middleware (included in fastapi but being explicit)

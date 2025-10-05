@@ -10,6 +10,7 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(null);
+  const [processingProgress, setProcessingProgress] = useState(null);
   const [showQuiz, setShowQuiz] = useState(false);
   const [updateStatus, setUpdateStatus] = useState(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
@@ -18,6 +19,31 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
     loadCourse();
     checkForUpdates();
   }, [configId]);
+
+  // Removed automatic polling - user can manually refresh instead
+  /*
+  // Poll for processing progress when not yet processed
+  useEffect(() => {
+    if (processingStatus && !processingStatus.processed) {
+      const interval = setInterval(async () => {
+        try {
+          const progress = await onboardingAPI.getProcessingProgress(configId);
+          setProcessingProgress(progress);
+          
+          // If completed, reload the course
+          if (progress.status === 'completed') {
+            clearInterval(interval);
+            loadCourse();
+          }
+        } catch (err) {
+          console.error('Error fetching progress:', err);
+        }
+      }, 2000); // Poll every 2 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [processingStatus, configId]);
+  */
 
   const loadCourse = async () => {
     try {
@@ -199,7 +225,41 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
             ) : (
               <div className="status-card warning">
                 <h3>⏳ Processing Content</h3>
-                <p>Your Confluence pages are being processed and embedded. Please wait...</p>
+                
+                {processingProgress && processingProgress.status === 'running' ? (
+                  <div className="progress-details">
+                    <div className="progress-bar-container">
+                      <div 
+                        className="progress-bar-fill" 
+                        style={{ width: `${processingProgress.progress_percentage}%` }}
+                      ></div>
+                      <span className="progress-percentage">{processingProgress.progress_percentage}%</span>
+                    </div>
+                    
+                    <div className="current-step">
+                      <strong>Step {processingProgress.current_step}/{processingProgress.total_steps}:</strong> {processingProgress.current_step_name}
+                    </div>
+                    
+                    {processingProgress.steps_log && processingProgress.steps_log.length > 0 && (
+                      <div className="progress-log">
+                        <h4>Progress Log:</h4>
+                        <div className="log-entries">
+                          {processingProgress.steps_log.slice(-10).reverse().map((log, idx) => (
+                            <div key={idx} className={`log-entry ${log.level || 'info'}`}>
+                              <span className="log-time">
+                                {new Date(log.timestamp).toLocaleTimeString()}
+                              </span>
+                              <span className="log-message">{log.details}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p>Your Confluence pages are being processed and embedded. Please wait...</p>
+                )}
+                
                 <button onClick={loadCourse} className="btn-secondary">
                   🔄 Refresh Status
                 </button>

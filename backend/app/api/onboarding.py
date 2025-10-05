@@ -5,11 +5,13 @@ from app.services.confluence_service import confluence_service
 from app.services.config_storage import get_storage
 from app.services.course_processor import course_processor
 from app.services.gemini_service import gemini_service
+from app.services.progress_tracker import progress_tracker
 from app.models.onboarding_config import (
     OnboardingConfigFile,
     CreateOnboardingRequest,
     UpdateOnboardingRequest
 )
+import traceback
 
 router = APIRouter()
 
@@ -50,13 +52,46 @@ class QuizResponse(BaseModel):
 async def create_config(request: CreateOnboardingRequest, background_tasks: BackgroundTasks):
     """
     Create a new onboarding config and save it to a file
-    Automatically processes the course in the background to embed all pages
+    Automatically processes the course, generates AI content, and creates quizzes
     """
     storage = get_storage()
     config = storage.create(request)
     
-    # Process the course in the background (fetch pages, embed content)
-    background_tasks.add_task(course_processor.process_course, config)
+    # Background task chain: process → generate course → generate quiz
+    def process_and_generate():
+        try:
+            # Step 1: Process the course (fetch pages, embed content)
+            print(f"[Create Config] Processing course: {config.id}")
+            course_processor.process_course(config)
+            print(f"[Create Config] ✅ Processing complete: {config.id}")
+            
+            # Step 2: Generate AI course content
+            print(f"[Create Config] Generating course content: {config.id}")
+            gemini_service.generate_course_content(
+                course_id=config.id,
+                course_title=config.title,
+                course_description=config.description,
+                num_modules=5
+            )
+            print(f"[Create Config] ✅ Course generation complete: {config.id}")
+            
+            # Step 3: Generate final quiz if test_at_end is enabled
+            if config.settings.test_at_end:
+                print(f"[Create Config] Generating final quiz: {config.id}")
+                gemini_service.generate_quiz(
+                    course_id=config.id,
+                    module_number=None,  # Final quiz
+                    num_questions=5,
+                    difficulty="medium"
+                )
+                print(f"[Create Config] ✅ Quiz generation complete: {config.id}")
+            
+            print(f"[Create Config] ✅✅✅ ALL COMPLETE: {config.id}")
+        except Exception as e:
+            print(f"[Create Config] ❌ ERROR for {config.id}: {e}")
+            print(f"[Create Config] Traceback:\n{traceback.format_exc()}")
+    
+    background_tasks.add_task(process_and_generate)
     
     return config
 
@@ -85,15 +120,44 @@ async def get_config(config_id: str):
 async def update_config(config_id: str, request: UpdateOnboardingRequest, background_tasks: BackgroundTasks):
     """
     Update an existing config and re-process the course
-    Automatically re-embeds all pages when configuration changes
+    Automatically re-embeds pages and regenerates AI content when configuration changes
     """
     storage = get_storage()
     config = storage.update(config_id, request)
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
     
-    # Re-process the course in the background
-    background_tasks.add_task(course_processor.process_course, config)
+    # Background task chain: reprocess → regenerate course → regenerate quiz
+    def reprocess_and_regenerate():
+        try:
+            # Step 1: Re-process the course (fetch pages, embed content)
+            print(f"[Update Config] Re-processing course: {config.id}")
+            course_processor.process_course(config)
+            
+            # Step 2: Regenerate AI course content
+            print(f"[Update Config] Regenerating course content: {config.id}")
+            gemini_service.generate_course_content(
+                course_id=config.id,
+                course_title=config.title,
+                course_description=config.description,
+                num_modules=5
+            )
+            
+            # Step 3: Regenerate final quiz if test_at_end is enabled
+            if config.settings.test_at_end:
+                print(f"[Update Config] Regenerating final quiz: {config.id}")
+                gemini_service.generate_quiz(
+                    course_id=config.id,
+                    module_number=None,  # Final quiz
+                    num_questions=5,
+                    difficulty="medium"
+                )
+            
+            print(f"[Update Config] ✅ Complete: {config.id}")
+        except Exception as e:
+            print(f"[Update Config] Error for {config.id}: {e}")
+    
+    background_tasks.add_task(reprocess_and_regenerate)
     
     return config
 
@@ -124,6 +188,31 @@ async def get_processing_status(config_id: str):
             "message": "Course has not been processed yet"
         }
     return status
+
+@router.get("/configs/{config_id}/progress")
+async def get_processing_progress(config_id: str):
+    """
+    Get real-time progress of course processing
+    Returns step-by-step progress with detailed logs
+    """
+    task_id = f"process_{config_id}"
+    progress = progress_tracker.get_task_progress(task_id)
+    
+    if not progress:
+        # Check if processing is complete
+        status = course_processor.get_processing_status(config_id)
+        if status:
+            return {
+                "status": "completed",
+                "message": "Processing completed",
+                "result": status
+            }
+        return {
+            "status": "not_started",
+            "message": "Processing has not started yet"
+        }
+    
+    return progress
 
 @router.get("/configs/{config_id}/check-updates")
 async def check_for_updates(config_id: str):
@@ -328,10 +417,15 @@ async def generate_course_quiz(config_id: str, question_count: int = 5):
 # AI-Generated Course Endpoints
 
 @router.post("/configs/{config_id}/generate-course")
-async def generate_course(config_id: str, background_tasks: BackgroundTasks, num_modules: int = 5):
+async def generate_course(config_id: str, background_tasks: BackgroundTasks, num_modules: int = 5, force: bool = False):
     """
     Generate an AI-powered interactive course from embedded Confluence content
     Uses Gemini 2.0 Flash Lite to create engaging modules with summaries and takeaways
+    
+    Args:
+        config_id: The course configuration ID
+        num_modules: Number of modules to generate (default: 5)
+        force: If True, regenerate even if course already exists (default: False)
     """
     storage = get_storage()
     config = storage.get(config_id)
@@ -345,6 +439,16 @@ async def generate_course(config_id: str, background_tasks: BackgroundTasks, num
             status_code=400, 
             detail="Course has not been processed yet. Please wait for embedding to complete."
         )
+    
+    # Check if course already exists (unless force regeneration)
+    existing_course = gemini_service.get_generated_course(config_id)
+    if existing_course and not force:
+        return {
+            "message": "Course already exists. Use force=true to regenerate.",
+            "course_id": config_id,
+            "status": "exists",
+            "course": existing_course
+        }
     
     # Generate the course in the background
     def generate_task():
@@ -361,7 +465,7 @@ async def generate_course(config_id: str, background_tasks: BackgroundTasks, num
     background_tasks.add_task(generate_task)
     
     return {
-        "message": "Course generation started",
+        "message": "Course generation started" if force else "Generating new course",
         "course_id": config_id,
         "status": "generating"
     }
@@ -391,6 +495,7 @@ class QuizGenerateRequest(BaseModel):
     module_number: Optional[int] = None  # None = final quiz for entire course
     num_questions: int = 5
     difficulty: str = "medium"  # "easy", "medium", or "hard"
+    force: bool = False  # Force regeneration even if quiz exists
 
 
 class QuizSubmission(BaseModel):
@@ -403,6 +508,10 @@ async def generate_quiz(config_id: str, request: QuizGenerateRequest, background
     """
     Generate a quiz based on course content
     Can generate quizzes for individual modules or the entire course
+    
+    Args:
+        config_id: The course configuration ID
+        request: Quiz generation parameters including force flag
     """
     storage = get_storage()
     config = storage.get(config_id)
@@ -417,6 +526,18 @@ async def generate_quiz(config_id: str, request: QuizGenerateRequest, background
             status_code=400,
             detail="Course has not been generated yet. Generate the course first."
         )
+    
+    # Check if quiz already exists (unless force regeneration)
+    existing_quiz = gemini_service.get_quiz(config_id, request.module_number)
+    if existing_quiz and not request.force:
+        quiz_type = f"module {request.module_number}" if request.module_number else "final"
+        return {
+            "message": f"Quiz already exists for {quiz_type}. Use force=true to regenerate.",
+            "course_id": config_id,
+            "module_number": request.module_number,
+            "status": "exists",
+            "quiz": existing_quiz
+        }
     
     # Generate quiz in background
     def generate_task():
@@ -434,7 +555,7 @@ async def generate_quiz(config_id: str, request: QuizGenerateRequest, background
     
     quiz_type = f"module {request.module_number}" if request.module_number else "final"
     return {
-        "message": f"Quiz generation started for {quiz_type}",
+        "message": f"Quiz generation started for {quiz_type}" if request.force else f"Generating new quiz for {quiz_type}",
         "course_id": config_id,
         "module_number": request.module_number,
         "status": "generating"

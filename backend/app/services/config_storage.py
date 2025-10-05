@@ -104,6 +104,13 @@ class OnboardingConfigStorage:
         
         # Update only the fields that were provided
         update_data = request.model_dump(exclude_unset=True)
+        
+        # Special handling for settings to ensure it's properly typed
+        if 'settings' in update_data and update_data['settings'] is not None:
+            from app.models.onboarding_config import OnboardingSettings
+            if isinstance(update_data['settings'], dict):
+                update_data['settings'] = OnboardingSettings(**update_data['settings'])
+        
         for field, value in update_data.items():
             setattr(config, field, value)
         

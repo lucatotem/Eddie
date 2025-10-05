@@ -99,25 +99,39 @@ class VectorStoreService:
         
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            print(f"[VectorStore] Processing batch {i//batch_size + 1}/{(len(texts)-1)//batch_size + 1}")
+            batch_num = i//batch_size + 1
+            total_batches = (len(texts)-1)//batch_size + 1
+            print(f"[VectorStore] Processing batch {batch_num}/{total_batches} ({len(batch)} texts)...")
             
-            # Generate embeddings for this batch
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=batch,
-                task_type="retrieval_document"  # For storing documents
-            )
-            
-            # Extract embeddings from result
-            if isinstance(result, dict) and 'embedding' in result:
-                # Single text case
-                embeddings.append(result['embedding'])
-            else:
-                # Batch case - result has an 'embeddings' field
-                for embedding in result['embedding']:
-                    embeddings.append(embedding)
+            try:
+                # Generate embeddings for this batch
+                print(f"[VectorStore] Calling Gemini API...")
+                result = genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=batch,
+                    task_type="retrieval_document"  # For storing documents
+                )
+                print(f"[VectorStore] ✓ Gemini API returned successfully")
+                
+                # Extract embeddings from result
+                # The API returns a dict with 'embedding' key containing the embeddings
+                batch_embeddings = result['embedding']
+                
+                # Check if it's a single embedding or batch
+                if isinstance(batch_embeddings[0], (int, float)):
+                    # Single embedding - wrap in list
+                    embeddings.append(batch_embeddings)
+                    print(f"[VectorStore] Added 1 embedding (single mode)")
+                else:
+                    # Batch of embeddings - extend directly
+                    embeddings.extend(batch_embeddings)
+                    print(f"[VectorStore] Added {len(batch_embeddings)} embeddings (batch mode)")
+                    
+            except Exception as e:
+                print(f"[VectorStore] ❌ ERROR in batch {batch_num}: {e}")
+                raise
         
-        print(f"[VectorStore] Generated {len(embeddings)} embeddings")
+        print(f"[VectorStore] ✓ Generated {len(embeddings)} embeddings total")
         return embeddings
     
     def chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
@@ -132,13 +146,25 @@ class VectorStoreService:
         Returns:
             List of text chunks
         """
+        print(f"[VectorStore] chunk_text called with text length: {len(text) if text else 0}, chunk_size: {chunk_size}")
+        
         if not text or len(text) <= chunk_size:
-            return [text] if text else []
+            result = [text] if text else []
+            print(f"[VectorStore] Text fits in one chunk, returning {len(result)} chunks")
+            return result
         
         chunks = []
         start = 0
+        iteration = 0
         
         while start < len(text):
+            iteration += 1
+            print(f"[VectorStore] Chunk iteration {iteration}: start={start}, text_len={len(text)}")
+            
+            if iteration > 100:
+                print(f"[VectorStore] ERROR: Too many iterations! Breaking to prevent infinite loop")
+                break
+            
             # Find the end of this chunk
             end = start + chunk_size
             
@@ -157,10 +183,30 @@ class VectorStoreService:
                     space = text.rfind(' ', start, end)
                     if space > start:
                         end = space
+            else:
+                # We're at or past the end of the text
+                end = len(text)
             
-            chunks.append(text[start:end].strip())
-            start = end - overlap if end < len(text) else end
+            chunk = text[start:end].strip()
+            if chunk:  # Only add non-empty chunks
+                chunks.append(chunk)
+                print(f"[VectorStore] Added chunk {len(chunks)}: length={len(chunk)}")
+            
+            # Move start position for next chunk
+            if end >= len(text):
+                print(f"[VectorStore] Reached end of text (end={end}, text_len={len(text)}), breaking")
+                break  # We've reached the end
+            else:
+                new_start = end - overlap
+                # Ensure we always move forward by a significant amount
+                # to avoid creating tiny overlapping chunks
+                min_progress = chunk_size // 4  # Move at least 25% of chunk size
+                if new_start <= start + min_progress:
+                    new_start = start + min_progress
+                start = new_start
+                print(f"[VectorStore] Moving to next chunk: new start={start}")
         
+        print(f"[VectorStore] chunk_text complete: created {len(chunks)} chunks")
         return chunks
     
     def add_page_content(
@@ -181,20 +227,27 @@ class VectorStoreService:
             page_content: Full page content (HTML will be stripped)
             page_url: Optional URL to the page
         """
+        print(f"[VectorStore] Adding page {page_id} to course {course_id}")
         collection = self.get_or_create_collection(course_id)
         
         # Strip HTML tags from content
+        print(f"[VectorStore] Stripping HTML from {len(page_content)} chars...")
         clean_content = strip_html(page_content)
+        print(f"[VectorStore] Clean content: {len(clean_content)} chars")
         
         # Chunk the content
+        print(f"[VectorStore] Chunking text...")
         chunks = self.chunk_text(clean_content)
+        print(f"[VectorStore] Created {len(chunks)} chunks")
         
         if not chunks:
             print(f"[VectorStore] No content to embed for page {page_id}")
             return
         
         # Generate embeddings
+        print(f"[VectorStore] Generating embeddings for {len(chunks)} chunks...")
         embeddings = self.generate_embeddings(chunks)
+        print(f"[VectorStore] ✓ Embeddings generated")
         
         # Create IDs for each chunk
         chunk_ids = [
@@ -215,12 +268,20 @@ class VectorStoreService:
         ]
         
         # Add to ChromaDB
-        collection.add(
-            ids=chunk_ids,
-            embeddings=embeddings,
-            documents=chunks,
-            metadatas=metadatas
-        )
+        try:
+            print(f"[VectorStore] Adding to ChromaDB collection...")
+            collection.add(
+                ids=chunk_ids,
+                embeddings=embeddings,
+                documents=chunks,
+                metadatas=metadatas
+            )
+            print(f"[VectorStore] ✓ Successfully added to ChromaDB")
+        except Exception as e:
+            print(f"[VectorStore] ✗ ChromaDB add failed: {e}")
+            import traceback
+            print(f"[VectorStore] Traceback: {traceback.format_exc()}")
+            raise
         
         print(f"[VectorStore] Added {len(chunks)} chunks for page {page_id} ({page_title})")
     
