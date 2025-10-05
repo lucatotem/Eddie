@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import List, Optional
 from pydantic import BaseModel
 from app.services.confluence_service import confluence_service
 from app.services.config_storage import get_storage
+from app.services.course_processor import course_processor
 from app.models.onboarding_config import (
     OnboardingConfigFile,
     CreateOnboardingRequest,
@@ -45,13 +46,17 @@ class QuizResponse(BaseModel):
 # NEW: File-based config management endpoints
 
 @router.post("/configs", response_model=OnboardingConfigFile)
-async def create_config(request: CreateOnboardingRequest):
+async def create_config(request: CreateOnboardingRequest, background_tasks: BackgroundTasks):
     """
     Create a new onboarding config and save it to a file
-    No more messing around with Confluence labels!
+    Automatically processes the course in the background to embed all pages
     """
     storage = get_storage()
     config = storage.create(request)
+    
+    # Process the course in the background (fetch pages, embed content)
+    background_tasks.add_task(course_processor.process_course, config)
+    
     return config
 
 
@@ -76,22 +81,48 @@ async def get_config(config_id: str):
 
 
 @router.put("/configs/{config_id}", response_model=OnboardingConfigFile)
-async def update_config(config_id: str, request: UpdateOnboardingRequest):
-    """Update an existing config"""
+async def update_config(config_id: str, request: UpdateOnboardingRequest, background_tasks: BackgroundTasks):
+    """
+    Update an existing config and re-process the course
+    Automatically re-embeds all pages when configuration changes
+    """
     storage = get_storage()
     config = storage.update(config_id, request)
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
+    
+    # Re-process the course in the background
+    background_tasks.add_task(course_processor.process_course, config)
+    
     return config
 
 
 @router.delete("/configs/{config_id}")
 async def delete_config(config_id: str):
-    """Delete a config file"""
+    """Delete a config file and all associated course data"""
     storage = get_storage()
     if not storage.delete(config_id):
         raise HTTPException(status_code=404, detail="Config not found")
+    
+    # Clean up all embeddings and processing data
+    course_processor.delete_course_data(config_id)
+    
     return {"message": "Config deleted successfully"}
+
+@router.get("/configs/{config_id}/processing-status")
+async def get_processing_status(config_id: str):
+    """
+    Get the processing status of a course
+    Shows how many pages have been processed and embedded
+    """
+    status = course_processor.get_processing_status(config_id)
+    if not status:
+        return {
+            "processed": False,
+            "message": "Course has not been processed yet"
+        }
+    return status
+
 
 @router.get("/course/{config_id}", response_model=OnboardingCourse)
 async def get_onboarding_course(config_id: str):
