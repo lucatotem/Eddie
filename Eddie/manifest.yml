@@ -1,0 +1,20 @@
+modules:
+  confluence:backgroundScript:
+    - key: eddie-confluence-background-script
+      resource: bgScriptResource
+  confluence:homepageFeed:
+    - key: eddie-confluence-background-script-homepage-feed
+      title: Eddie
+      description: Homepage feed that talks with a background script
+      resource: homepageFeedResource
+resources:
+  - key: bgScriptResource
+    path: static/background-script/build
+  - key: homepageFeedResource
+    path: static/homepage-feed/build
+app:
+  runtime:
+    name: nodejs22.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/af6ca2db-51da-4ee9-82d8-83a398d7d22c
