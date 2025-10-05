@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { onboardingAPI } from '../services/api';
+import CourseViewer from './CourseViewer';
 import './Dashboard.css';
 
 /**
@@ -15,6 +16,7 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
   const [quiz, setQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizResults, setQuizResults] = useState(null);
+  const [showCourseViewer, setShowCourseViewer] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -132,6 +134,25 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
   // Check if quiz should be shown based on settings
   const showQuiz = config.settings?.test_at_end !== false;
 
+  // Show course viewer if active
+  if (showCourseViewer) {
+    return (
+      <CourseViewer 
+        configId={configId}
+        onClose={() => setShowCourseViewer(false)}
+        onStartQuiz={() => {
+          setShowCourseViewer(false);
+          // Scroll to quiz section if quiz is enabled
+          if (showQuiz) {
+            setTimeout(() => {
+              document.querySelector('.quiz-section')?.scrollIntoView({ behavior: 'smooth' });
+            }, 300);
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
@@ -143,6 +164,9 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
           </p>
         </div>
         <div className="header-actions">
+          <button onClick={() => setShowCourseViewer(true)} className="course-button">
+            🎓 Take AI Course
+          </button>
           <button onClick={onEdit} className="edit-button">
             ✏️ Edit Config
           </button>

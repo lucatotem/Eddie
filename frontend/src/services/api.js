@@ -57,6 +57,51 @@ export const onboardingAPI = {
     });
     return response.data;
   },
+
+  // AI-Generated Course endpoints
+  getProcessingStatus: async (configId) => {
+    const response = await api.get(`/api/onboarding/configs/${configId}/processing-status`);
+    return response.data;
+  },
+
+  generateCourse: async (configId, numModules = 5) => {
+    const response = await api.post(`/api/onboarding/configs/${configId}/generate-course`, null, {
+      params: { num_modules: numModules }
+    });
+    return response.data;
+  },
+
+  getGeneratedCourse: async (configId) => {
+    const response = await api.get(`/api/onboarding/configs/${configId}/generated-course`);
+    return response.data;
+  },
+
+  // Quiz endpoints
+  generateQuiz: async (configId, options = {}) => {
+    const { moduleNumber = null, numQuestions = 5, difficulty = 'medium' } = options;
+    const response = await api.post(`/api/onboarding/configs/${configId}/generate-quiz`, {
+      module_number: moduleNumber,
+      num_questions: numQuestions,
+      difficulty: difficulty
+    });
+    return response.data;
+  },
+
+  getQuiz: async (configId, moduleNumber = null) => {
+    const params = moduleNumber !== null ? { module_number: moduleNumber } : {};
+    const response = await api.get(`/api/onboarding/configs/${configId}/quiz`, { params });
+    return response.data;
+  },
+
+  submitQuiz: async (configId, answers, moduleNumber = null) => {
+    const params = moduleNumber !== null ? { module_number: moduleNumber } : {};
+    const response = await api.post(
+      `/api/onboarding/configs/${configId}/quiz/submit`,
+      { answers },
+      { params }
+    );
+    return response.data;
+  },
 };
 
 export const confluenceAPI = {
