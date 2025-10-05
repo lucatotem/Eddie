@@ -18,16 +18,16 @@ class GeminiService:
         self._initialize_model()
     
     def _initialize_model(self):
-        """Initialize the Gemini 2.5 Pro model"""
+        """Initialize the Gemini 2.5 Flash model"""
         if not self.settings.gemini_api_key:
             print("Warning: GEMINI_API_KEY not set. AI generation will not work.")
             return
         
         try:
             genai.configure(api_key=self.settings.gemini_api_key)
-            # Use Gemini 2.5 Pro for high-quality generation
-            self.model = genai.GenerativeModel('gemini-2.5-pro')
-            print("[Gemini] Model initialized: gemini-2.5-pro")
+            # Use Gemini 2.5 Flash for better rate limits on free tier
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            print("[Gemini] Model initialized: gemini-2.5-flash")
         except Exception as e:
             print(f"[Gemini] Error initializing model: {e}")
             self.model = None

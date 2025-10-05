@@ -69,8 +69,8 @@ async def create_config(request: CreateOnboardingRequest, background_tasks: Back
             print(f"[Create Config] Generating course content: {config.id}")
             gemini_service.generate_course_content(
                 course_id=config.id,
-                course_title=config.title,
-                course_description=config.description,
+                course_title=config.name,
+                course_description=config.instructions,
                 num_modules=5
             )
             print(f"[Create Config] ✅ Course generation complete: {config.id}")
@@ -138,8 +138,8 @@ async def update_config(config_id: str, request: UpdateOnboardingRequest, backgr
             print(f"[Update Config] Regenerating course content: {config.id}")
             gemini_service.generate_course_content(
                 course_id=config.id,
-                course_title=config.title,
-                course_description=config.description,
+                course_title=config.name,
+                course_description=config.instructions,
                 num_modules=5
             )
             
@@ -455,8 +455,8 @@ async def generate_course(config_id: str, background_tasks: BackgroundTasks, num
         try:
             gemini_service.generate_course_content(
                 course_id=config_id,
-                course_title=config.title,
-                course_description=config.description,
+                course_title=config.name,
+                course_description=config.instructions,
                 num_modules=num_modules
             )
         except Exception as e:

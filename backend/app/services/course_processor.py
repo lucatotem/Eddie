@@ -261,7 +261,8 @@ class CourseProcessor:
             page_ids = list(expanded_ids)
         
         # Compare with previously processed pages
-        processed_page_ids = {p["page_id"] for p in status.get("processed_pages", [])}
+        # Note: "processed_pages" is an int count, actual pages are in "pages" list
+        processed_page_ids = {p["page_id"] for p in status.get("pages", [])}
         current_page_ids = set(page_ids)
         
         new_pages = current_page_ids - processed_page_ids

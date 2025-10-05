@@ -43,12 +43,16 @@ def main():
         page = service.get_page_by_id(page_id)
         if page:
             print(f"Title: {page['title']}")
+            print(f"Keys: {list(page.keys())}")
             
             # Get plain text content
-            from bs4 import BeautifulSoup
-            content_html = page['content']
-            soup = BeautifulSoup(content_html, 'html.parser')
-            clean_text = soup.get_text(separator='\n', strip=True)
+            import html2text
+            content_html = page.get('body', {}).get('storage', {}).get('value', page.get('content', ''))
+            
+            # Use html2text to convert to plain text
+            h = html2text.HTML2Text()
+            h.ignore_links = False
+            clean_text = h.handle(content_html)
             
             print(f"\nContent ({len(clean_text)} chars):")
             print(clean_text)
