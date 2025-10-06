@@ -335,9 +335,32 @@
 
 .content-markdown h1,
 .content-markdown h2,
-.content-markdown h3 {
+.content-markdown h3,
+.content-markdown h4,
+.content-markdown h5 {
   margin: 1.5rem 0 1rem 0;
   color: #1a1a2e;
+  font-weight: 600;
+}
+
+.content-markdown h1 {
+  font-size: 2rem;
+}
+
+.content-markdown h2 {
+  font-size: 1.5rem;
+}
+
+.content-markdown h3 {
+  font-size: 1.25rem;
+}
+
+.content-markdown h4 {
+  font-size: 1.1rem;
+}
+
+.content-markdown h5 {
+  font-size: 1rem;
 }
 
 .content-markdown code {
@@ -367,6 +390,44 @@
 .content-markdown strong {
   font-weight: 600;
   color: #1a1a2e;
+}
+
+.content-markdown .markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.content-markdown .markdown-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.content-markdown .markdown-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+}
+
+.content-markdown .markdown-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #e9ecef;
+  color: #495057;
+}
+
+.content-markdown .markdown-table tbody tr:hover {
+  background: #f8f9fa;
+  transition: background 0.2s ease;
+}
+
+.content-markdown .markdown-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .module-key-points ul,

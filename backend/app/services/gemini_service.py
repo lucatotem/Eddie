@@ -32,6 +32,53 @@ class GeminiService:
             print(f"[Gemini] Error initializing model: {e}")
             self.model = None
     
+    def _calculate_optimal_module_count(self, total_content_length: int, num_pages: int) -> int:
+        """
+        Calculate optimal number of modules based on content length
+        
+        Args:
+            total_content_length: Total character count of all content
+            num_pages: Number of Confluence pages
+            
+        Returns:
+            Recommended number of modules (between 2 and 12)
+        """
+        # Base calculation: ~500-1000 chars per module for engagement
+        chars_per_module = 750
+        content_based = max(2, min(12, total_content_length // chars_per_module))
+        
+        # Also consider page count (at least 1 module per 2 pages, max 1 per page)
+        page_based = max(2, min(num_pages, num_pages // 2 + 1))
+        
+        # Use the average, weighted toward content length
+        optimal = int((content_based * 0.7) + (page_based * 0.3))
+        
+        # Clamp between 2 and 12 modules
+        return max(2, min(12, optimal))
+    
+    def _calculate_optimal_question_count(self, num_modules: int, total_content_length: int) -> int:
+        """
+        Calculate optimal number of quiz questions based on module count and content
+        
+        Args:
+            num_modules: Number of modules in the course
+            total_content_length: Total character count of all content
+            
+        Returns:
+            Recommended number of questions (between 3 and 20)
+        """
+        # Base: 1.5-2 questions per module
+        module_based = int(num_modules * 1.75)
+        
+        # Also consider content length: ~1 question per 400 chars
+        content_based = max(3, total_content_length // 400)
+        
+        # Use weighted average
+        optimal = int((module_based * 0.6) + (content_based * 0.4))
+        
+        # Clamp between 3 and 20 questions
+        return max(3, min(20, optimal))
+    
     def _call_gemini_with_retry(self, prompt: str, max_retries: int = 3) -> Optional[str]:
         """
         Call Gemini API with retry logic and rate limiting
@@ -88,7 +135,7 @@ class GeminiService:
         course_id: str, 
         course_title: str,
         course_description: str,
-        num_modules: int = 5
+        num_modules: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Generate an interactive course with multiple modules
@@ -98,7 +145,7 @@ class GeminiService:
             course_id: The ID of the course config
             course_title: Title of the course
             course_description: Description/instructions for the course
-            num_modules: Number of modules to generate (default: 5)
+            num_modules: Number of modules to generate (None = auto-calculate based on content)
         
         Returns:
             Dictionary with course structure and generated content
@@ -119,6 +166,7 @@ class GeminiService:
         
         # Step 2: Organize content by page
         pages_content = {}
+        total_content_length = 0
         for result in search_results:
             page_id = result["metadata"].get("page_id")
             page_title = result["metadata"].get("page_title", "Untitled")
@@ -128,6 +176,16 @@ class GeminiService:
                     "title": page_title,
                     "chunks": []
                 }
+            pages_content[page_id]["chunks"].append(result["text"])
+            total_content_length += len(result["text"])
+        
+        # Calculate optimal module count if not specified
+        if num_modules is None:
+            num_modules = self._calculate_optimal_module_count(
+                total_content_length=total_content_length,
+                num_pages=len(pages_content)
+            )
+            print(f"[Gemini] Auto-calculated {num_modules} modules based on {total_content_length} chars across {len(pages_content)} pages")
             pages_content[page_id]["chunks"].append(result["text"])
         
         # Step 3: Generate module breakdown using AI
@@ -357,7 +415,7 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
         self,
         course_id: str,
         module_number: Optional[int] = None,
-        num_questions: int = 5,
+        num_questions: Optional[int] = None,
         difficulty: str = "medium"
     ) -> Dict[str, Any]:
         """
@@ -366,7 +424,7 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
         Args:
             course_id: The ID of the course
             module_number: Specific module to quiz on (None = entire course)
-            num_questions: Number of questions to generate (default: 5)
+            num_questions: Number of questions to generate (None = auto-calculate)
             difficulty: Question difficulty - "easy", "medium", or "hard"
         
         Returns:
@@ -402,6 +460,16 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
         )
         
         source_content = "\n\n".join([result["text"] for result in search_results[:10]])
+        total_content_length = sum(len(r["text"]) for r in search_results)
+        
+        # Calculate optimal question count if not specified
+        if num_questions is None:
+            num_modules = len(course_data.get("modules", []))
+            num_questions = self._calculate_optimal_question_count(
+                num_modules=num_modules,
+                total_content_length=total_content_length
+            )
+            print(f"[Gemini] Auto-calculated {num_questions} questions based on {num_modules} modules and {total_content_length} chars")
         
         # Generate quiz questions
         quiz_prompt = f"""You are creating an assessment quiz for an onboarding course.
@@ -414,23 +482,31 @@ Content to Quiz On:
 {json.dumps(quiz_content, indent=2)[:3000]}
 
 Additional Source Material:
-{source_content[:2000]}
+{source_content[:3000]}
 
-Create {num_questions} multiple-choice questions that:
-1. Test understanding of key concepts
-2. Are clear and unambiguous
-3. Have 4 answer options each
+Create {num_questions} comprehensive multiple-choice questions that:
+1. Test understanding of the MOST IMPORTANT concepts and key information
+2. Are clear, specific, and unambiguous
+3. Have 4 answer options each (one correct, three plausible distractors)
 4. Include detailed explanations for the correct answer
 5. Match the {difficulty} difficulty level
-6. Cover different aspects of the content
+6. Cover different aspects of the content (don't repeat topics)
+7. Focus on practical application and real understanding, not just memorization
+8. Are directly based on the source material provided
+
+IMPORTANT: 
+- Quality over quantity - each question should test critical knowledge
+- Avoid trivial or overly specific details
+- Questions should help verify the learner truly understands the material
+- Make distractors realistic but clearly incorrect to someone who learned the material
 
 Return ONLY a JSON array with this structure:
 [
   {{
-    "question": "The question text",
+    "question": "The question text (clear and specific)",
     "options": ["Option A", "Option B", "Option C", "Option D"],
     "correct_answer": 0,
-    "explanation": "Why this is correct and what concept it tests",
+    "explanation": "Detailed explanation of why this is correct and what concept it tests",
     "difficulty": "{difficulty}"
   }}
 ]

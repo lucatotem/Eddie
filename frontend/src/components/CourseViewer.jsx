@@ -424,8 +424,51 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
 const formatMarkdown = (text) => {
   if (!text) return '';
   
-  let html = text
-    // Headers
+  let html = text;
+  
+  // Process tables first (before other replacements)
+  html = html.replace(/^\|(.+)\|[ \t]*\n\|[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)+\|[ \t]*\n((?:\|.+\|[ \t]*\n?)+)/gm, (match, headerRow, bodyRows) => {
+    // Parse header
+    const headers = headerRow.split('|')
+      .map(h => h.trim())
+      .filter(h => h.length > 0);
+    
+    // Parse body rows
+    const rows = bodyRows.trim().split('\n')
+      .map(row => {
+        return row.split('|')
+          .map(cell => cell.trim())
+          .filter(cell => cell.length > 0);
+      });
+    
+    // Build HTML table
+    let tableHtml = '<table class="markdown-table">';
+    
+    // Header
+    tableHtml += '<thead><tr>';
+    headers.forEach(header => {
+      tableHtml += `<th>${header}</th>`;
+    });
+    tableHtml += '</tr></thead>';
+    
+    // Body
+    tableHtml += '<tbody>';
+    rows.forEach(row => {
+      tableHtml += '<tr>';
+      row.forEach(cell => {
+        tableHtml += `<td>${cell}</td>`;
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table>';
+    
+    return tableHtml;
+  });
+  
+  html = html
+    // Headers (order matters - process from most # to least)
+    .replace(/^##### (.*$)/gim, '<h5>$1</h5>')
+    .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
     .replace(/^### (.*$)/gim, '<h3>$1</h3>')
     .replace(/^## (.*$)/gim, '<h2>$1</h2>')
     .replace(/^# (.*$)/gim, '<h1>$1</h1>')
