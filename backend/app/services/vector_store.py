@@ -4,8 +4,21 @@ Handles embeddings and semantic search for course content
 Uses Gemini text-embedding-004 for embeddings
 """
 
+import os
+# Disable ChromaDB telemetry aggressively to avoid library bugs
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+os.environ["CHROMA_TELEMETRY"] = "False"
+
 import chromadb
 from chromadb.config import Settings as ChromaSettings
+
+# Monkey-patch to completely disable telemetry
+try:
+    from chromadb.telemetry.posthog import Posthog
+    Posthog.capture = lambda *args, **kwargs: None
+except:
+    pass
+
 import google.generativeai as genai
 from typing import List, Dict, Optional
 import hashlib

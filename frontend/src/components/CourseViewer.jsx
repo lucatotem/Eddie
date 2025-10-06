@@ -6,6 +6,7 @@ import './CourseViewer.css';
 const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
   const [course, setCourse] = useState(null);
   const [currentModuleIndex, setCurrentModuleIndex] = useState(0);
+  const [currentFactIndex, setCurrentFactIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -14,6 +15,7 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
   const [showQuiz, setShowQuiz] = useState(false);
   const [updateStatus, setUpdateStatus] = useState(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [completedFacts, setCompletedFacts] = useState(new Set());
 
   useEffect(() => {
     loadCourse();
@@ -146,7 +148,116 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
 
   const handleModuleSelect = (index) => {
     setCurrentModuleIndex(index);
+    setCurrentFactIndex(0); // Reset to first fact of new module
   };
+
+  // Build comprehensive facts array for current module
+  const buildFactsArray = (module) => {
+    if (!module) return [];
+    
+    const facts = [];
+    
+    // 1. Add overview as first fact
+    if (module.overview) {
+      facts.push({
+        type: 'overview',
+        content: module.overview,
+        title: '📋 Overview'
+      });
+    }
+    
+    // 2. Add all main facts (if using new structure)
+    if (module.facts && Array.isArray(module.facts)) {
+      module.facts.forEach((fact, idx) => {
+        facts.push({
+          type: 'fact',
+          content: fact,
+          title: `💡 Concept ${idx + 1}`
+        });
+      });
+    }
+    // Fallback: if using old "content" structure, split it into chunks
+    else if (module.content) {
+      const contentChunks = module.content.split('\n\n').filter(c => c.trim());
+      contentChunks.forEach((chunk, idx) => {
+        facts.push({
+          type: 'fact',
+          content: chunk,
+          title: `📚 Content ${idx + 1}`
+        });
+      });
+    }
+    
+    // 3. Add each key point as a separate fact
+    if (module.key_points && Array.isArray(module.key_points)) {
+      module.key_points.forEach((point, idx) => {
+        facts.push({
+          type: 'key_point',
+          content: point,
+          title: `🔑 Key Point ${idx + 1}`
+        });
+      });
+    }
+    
+    // 4. Add each takeaway as a separate fact
+    if (module.takeaways && Array.isArray(module.takeaways)) {
+      module.takeaways.forEach((takeaway, idx) => {
+        facts.push({
+          type: 'takeaway',
+          content: takeaway,
+          title: `💡 Takeaway ${idx + 1}`
+        });
+      });
+    }
+    
+    return facts;
+  };
+
+  const handleNextFact = () => {
+    const currentModule = course.modules[currentModuleIndex];
+    const facts = buildFactsArray(currentModule);
+    
+    // Mark current fact as completed
+    const factKey = `${currentModuleIndex}-${currentFactIndex}`;
+    setCompletedFacts(prev => new Set([...prev, factKey]));
+    
+    if (currentFactIndex < facts.length - 1) {
+      // Move to next fact in current module
+      setCurrentFactIndex(currentFactIndex + 1);
+    } else if (currentModuleIndex < course.modules.length - 1) {
+      // Move to next module
+      setCurrentModuleIndex(currentModuleIndex + 1);
+      setCurrentFactIndex(0);
+    } else {
+      // Course complete - show quiz
+      setShowQuiz(true);
+    }
+  };
+
+  const handlePreviousFact = () => {
+    if (currentFactIndex > 0) {
+      setCurrentFactIndex(currentFactIndex - 1);
+    } else if (currentModuleIndex > 0) {
+      // Go to last fact of previous module
+      setCurrentModuleIndex(currentModuleIndex - 1);
+      const prevModule = course.modules[currentModuleIndex - 1];
+      const prevFacts = buildFactsArray(prevModule);
+      setCurrentFactIndex(prevFacts.length - 1);
+    }
+  };
+
+  // Randomized encouraging messages for the Next button
+  const nextButtonMessages = [
+    "Next! ✨",
+    "Keep going! 🚀",
+    "You got this! 💪",
+    "Onwards! 🎯",
+    "Let's continue! 🌟",
+    "Next up! ⚡",
+    "Moving forward! 🎓",
+    "Keep learning! 📚",
+    "One more! 🔥"
+  ];
 
   if (loading) {
     return (
@@ -272,7 +383,27 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
   }
 
   const currentModule = course.modules[currentModuleIndex];
-  const progress = ((currentModuleIndex + 1) / course.modules.length) * 100;
+  const currentFacts = buildFactsArray(currentModule);
+  const currentFact = currentFacts[currentFactIndex];
+  const totalFacts = currentFacts.length;
+  const moduleProgress = totalFacts > 0 ? ((currentFactIndex + 1) / totalFacts) * 100 : 0;
+  
+  // Calculate overall progress across all modules
+  let totalFactsInCourse = 0;
+  let completedFactsCount = 0;
+  course.modules.forEach((mod, modIdx) => {
+    const modFacts = buildFactsArray(mod);
+    totalFactsInCourse += modFacts.length;
+    if (modIdx < currentModuleIndex) {
+      completedFactsCount += modFacts.length;
+    } else if (modIdx === currentModuleIndex) {
+      completedFactsCount += currentFactIndex;
+    }
+  });
+  const overallProgress = totalFactsInCourse > 0 ? (completedFactsCount / totalFactsInCourse) * 100 : 0;
+  
+  // Random next button message
+  const nextMessage = nextButtonMessages[Math.floor(Math.random() * nextButtonMessages.length)];
 
   return (
     <div className="course-viewer">
@@ -301,10 +432,10 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
 
       <div className="course-progress">
         <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+          <div className="progress-fill" style={{ width: `${overallProgress}%` }}></div>
         </div>
         <p className="progress-text">
-          Module {currentModuleIndex + 1} of {course.modules.length}
+          Module {currentModuleIndex + 1} of {course.modules.length} • {Math.round(overallProgress)}% Complete
         </p>
       </div>
 
@@ -312,87 +443,88 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
         <aside className="course-sidebar">
           <h3>Course Modules</h3>
           <nav className="module-list">
-            {course.modules.map((module, index) => (
-              <button
-                key={index}
-                className={`module-item ${index === currentModuleIndex ? 'active' : ''} ${index < currentModuleIndex ? 'completed' : ''}`}
-                onClick={() => handleModuleSelect(index)}
-              >
-                <span className="module-number">{module.module_number}</span>
-                <span className="module-title">{module.title}</span>
-                {index < currentModuleIndex && <span className="check-mark">✓</span>}
-              </button>
-            ))}
+            {course.modules.map((module, index) => {
+              const moduleFacts = buildFactsArray(module);
+              const isComplete = index < currentModuleIndex;
+              return (
+                <button
+                  key={index}
+                  className={`module-item ${index === currentModuleIndex ? 'active' : ''} ${isComplete ? 'completed' : ''}`}
+                  onClick={() => handleModuleSelect(index)}
+                >
+                  <span className="module-number">{module.module_number}</span>
+                  <div className="module-info">
+                    <span className="module-title">{module.title}</span>
+                    <span className="module-facts-count">{moduleFacts.length} facts</span>
+                  </div>
+                  {isComplete && <span className="check-mark">✓</span>}
+                </button>
+              );
+            })}
           </nav>
         </aside>
 
-        <main className="course-content">
+        <main className="course-content fact-card-view">
           <div className="module-header">
             <span className="module-badge">Module {currentModule.module_number}</span>
             <h2>{currentModule.title}</h2>
-            <p className="module-description">{currentModule.description}</p>
+            <div className="module-progress-bar">
+              <div className="module-progress-fill" style={{ width: `${moduleProgress}%` }}></div>
+              <span className="module-progress-text">
+                {currentFactIndex + 1} / {totalFacts}
+              </span>
+            </div>
           </div>
 
-          <div className="module-overview">
-            <h3>📋 Overview</h3>
-            <p>{currentModule.overview}</p>
-          </div>
+          {currentFact && (
+            <div className="fact-card-container">
+              <div className={`fact-card ${currentFact.type}`}>
+                <div className="fact-card-header">
+                  <h3>{currentFact.title}</h3>
+                  <span className="fact-number">{currentFactIndex + 1} of {totalFacts}</span>
+                </div>
+                <div className="fact-card-content">
+                  {currentFact.type === 'fact' ? (
+                    <div 
+                      className="content-markdown"
+                      dangerouslySetInnerHTML={{ __html: formatMarkdown(currentFact.content) }}
+                    />
+                  ) : (
+                    <p className="fact-text">{currentFact.content}</p>
+                  )}
+                </div>
+                {completedFacts.has(`${currentModuleIndex}-${currentFactIndex}`) && (
+                  <div className="fact-completed-badge">✓ Completed</div>
+                )}
+              </div>
 
-          <div className="module-main-content">
-            <h3>📚 Content</h3>
-            <div 
-              className="content-markdown"
-              dangerouslySetInnerHTML={{ __html: formatMarkdown(currentModule.content) }}
-            />
-          </div>
-
-          {currentModule.key_points && currentModule.key_points.length > 0 && (
-            <div className="module-key-points">
-              <h3>🔑 Key Points</h3>
-              <ul>
-                {currentModule.key_points.map((point, index) => (
-                  <li key={index}>{point}</li>
-                ))}
-              </ul>
+              <div className="fact-navigation">
+                <button 
+                  onClick={handlePreviousFact} 
+                  disabled={currentModuleIndex === 0 && currentFactIndex === 0}
+                  className="btn-secondary"
+                >
+                  ← Previous
+                </button>
+                
+                {currentModuleIndex === course.modules.length - 1 && currentFactIndex === totalFacts - 1 ? (
+                  <button 
+                    onClick={() => setShowQuiz(true)}
+                    className="btn-primary btn-quiz"
+                  >
+                    🎯 Take Final Quiz →
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleNextFact}
+                    className="btn-primary btn-next"
+                  >
+                    {nextMessage}
+                  </button>
+                )}
+              </div>
             </div>
           )}
-
-          {currentModule.takeaways && currentModule.takeaways.length > 0 && (
-            <div className="module-takeaways">
-              <h3>💡 Takeaways</h3>
-              <ul>
-                {currentModule.takeaways.map((takeaway, index) => (
-                  <li key={index}>{takeaway}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="module-navigation">
-            <button 
-              onClick={handlePreviousModule} 
-              disabled={currentModuleIndex === 0}
-              className="btn-secondary"
-            >
-              ← Previous
-            </button>
-            
-            {currentModuleIndex === course.modules.length - 1 ? (
-              <button 
-                onClick={() => setShowQuiz(true)}
-                className="btn-primary"
-              >
-                Take Final Quiz →
-              </button>
-            ) : (
-              <button 
-                onClick={handleNextModule}
-                className="btn-primary"
-              >
-                Next Module →
-              </button>
-            )}
-          </div>
         </main>
       </div>
 
