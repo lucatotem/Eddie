@@ -71,7 +71,7 @@ async def create_config(request: CreateOnboardingRequest, background_tasks: Back
                 course_id=config.id,
                 course_title=config.name,
                 course_description=config.instructions,
-                num_modules=5
+                num_modules=None  # Auto-calculate based on content
             )
             print(f"[Create Config] ✅ Course generation complete: {config.id}")
             
@@ -81,7 +81,7 @@ async def create_config(request: CreateOnboardingRequest, background_tasks: Back
                 gemini_service.generate_quiz(
                     course_id=config.id,
                     module_number=None,  # Final quiz
-                    num_questions=5,
+                    num_questions=None,  # Auto-calculate based on content
                     difficulty="medium"
                 )
                 print(f"[Create Config] ✅ Quiz generation complete: {config.id}")
@@ -140,7 +140,7 @@ async def update_config(config_id: str, request: UpdateOnboardingRequest, backgr
                 course_id=config.id,
                 course_title=config.name,
                 course_description=config.instructions,
-                num_modules=5
+                num_modules=None  # Auto-calculate based on content
             )
             
             # Step 3: Regenerate final quiz if test_at_end is enabled
@@ -149,7 +149,7 @@ async def update_config(config_id: str, request: UpdateOnboardingRequest, backgr
                 gemini_service.generate_quiz(
                     course_id=config.id,
                     module_number=None,  # Final quiz
-                    num_questions=5,
+                    num_questions=None,  # Auto-calculate based on content
                     difficulty="medium"
                 )
             
