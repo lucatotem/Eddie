@@ -22,9 +22,8 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
     checkForUpdates();
   }, [configId]);
 
-  // Removed automatic polling - user can manually refresh instead
+  // we used to auto-poll but it was annoying, now you just click refresh
   /*
-  // Poll for processing progress when not yet processed
   useEffect(() => {
     if (processingStatus && !processingStatus.processed) {
       const interval = setInterval(async () => {
@@ -52,13 +51,13 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
       setLoading(true);
       setError(null);
 
-      // Check if course is generated
+      // see if the course exists
       try {
         const courseData = await onboardingAPI.getGeneratedCourse(configId);
         setCourse(courseData);
         setLoading(false);
       } catch (err) {
-        // Course not generated yet, check processing status
+        // course not ready yet
         if (err.response?.status === 404) {
           const status = await onboardingAPI.getProcessingStatus(configId);
           setProcessingStatus(status);
@@ -81,7 +80,7 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
       setError(null);
       await onboardingAPI.generateCourse(configId, numModules);
       
-      // Poll for completion
+      // keep checking until it's done
       const pollInterval = setInterval(async () => {
         try {
           const courseData = await onboardingAPI.getGeneratedCourse(configId);
@@ -89,11 +88,11 @@ const CourseViewer = ({ configId, onClose, onStartQuiz }) => {
           setGenerating(false);
           clearInterval(pollInterval);
         } catch (err) {
-          // Still generating, continue polling
+          // still cooking...
         }
       }, 3000);
 
-      // Stop polling after 2 minutes
+      // give up after 2 minutes (something probably went wrong)
       setTimeout(() => {
         clearInterval(pollInterval);
         if (generating) {

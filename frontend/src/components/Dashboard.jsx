@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { onboardingAPI } from '../services/api';
 import CourseViewer from './CourseViewer';
+import Quiz from './Quiz';
 import './Dashboard.css';
 
-/**
- * Dashboard - now loads config from file instead of Confluence
- * Respects the settings for folder recursion and quiz toggling
- */
+// main dashboard - shows course info and lets you start learning
 const Dashboard = ({ configId, onBack, onEdit }) => {
   const [config, setConfig] = useState(null);
   const [courseData, setCourseData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [summary, setSummary] = useState(null);
-  const [quiz, setQuiz] = useState(null);
-  const [quizAnswers, setQuizAnswers] = useState({});
-  const [quizResults, setQuizResults] = useState(null);
   const [showCourseViewer, setShowCourseViewer] = useState(false);
+  const [showQuizViewer, setShowQuizViewer] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -74,37 +70,17 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
     }
   };
 
-  const handleGenerateQuiz = async () => {
-    try {
-      const quizData = await onboardingAPI.generateCourseQuiz(configId, 5);
-      setQuiz(quizData);
-      setQuizAnswers({});
-      setQuizResults(null);
-    } catch (err) {
-      console.error('Error generating quiz:', err);
-      alert('Failed to generate quiz.');
-    }
+  const handleTakeQuiz = () => {
+    // open the quiz (same one you'd see after finishing the course)
+    setShowQuizViewer(true);
   };
 
   const handleQuizSubmit = () => {
-    if (!quiz) return;
-    
-    let correct = 0;
-    quiz.questions.forEach((q, idx) => {
-      if (quizAnswers[idx] === q.correct_answer) {
-        correct++;
-      }
-    });
-    
-    setQuizResults({
-      correct,
-      total: quiz.questions.length,
-      percentage: Math.round((correct / quiz.questions.length) * 100)
-    });
+    // deprecated but kept so nothing breaks
   };
 
   const stripHTML = (html) => {
-    // Quick and dirty HTML stripper for previews
+    // quick and dirty way to remove HTML tags for previews
     const tmp = document.createElement('DIV');
     tmp.innerHTML = html;
     return tmp.textContent || tmp.innerText || '';
@@ -131,10 +107,10 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
     return null;
   }
 
-  // Check if quiz should be shown based on settings
+  // check if quiz should be shown (based on config settings)
   const showQuiz = config.settings?.test_at_end !== false;
 
-  // Show course viewer if active
+  // show course viewer if active
   if (showCourseViewer) {
     return (
       <CourseViewer 
@@ -142,12 +118,21 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
         onClose={() => setShowCourseViewer(false)}
         onStartQuiz={() => {
           setShowCourseViewer(false);
-          // Scroll to quiz section if quiz is enabled
-          if (showQuiz) {
-            setTimeout(() => {
-              document.querySelector('.quiz-section')?.scrollIntoView({ behavior: 'smooth' });
-            }, 300);
-          }
+          setShowQuizViewer(true);
+        }}
+      />
+    );
+  }
+
+  // show quiz if they clicked "Take Quiz"
+  if (showQuizViewer) {
+    return (
+      <Quiz
+        configId={configId}
+        moduleNumber={null}
+        onClose={() => setShowQuizViewer(false)}
+        onComplete={(results) => {
+          console.log('Quiz completed:', results);
         }}
       />
     );
@@ -191,7 +176,7 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
           📝 Get Course Summary
         </button>
         {showQuiz && (
-          <button onClick={handleGenerateQuiz} className="action-button quiz-button">
+          <button onClick={handleTakeQuiz} className="action-button quiz-button">
             ✅ Take Course Quiz
           </button>
         )}
@@ -257,61 +242,6 @@ const Dashboard = ({ configId, onBack, onEdit }) => {
           </div>
         )}
       </div>
-
-      {/* Quiz section */}
-      {quiz && (
-        <div className="quiz-section">
-          <h3>✅ Knowledge Check</h3>
-          {quiz.questions.map((q, idx) => (
-            <div 
-              key={idx} 
-              className="quiz-question"
-              style={{
-                backgroundColor: quizResults && (quizAnswers[idx] === q.correct_answer ? '#E3FCEF' : '#FFEBE6')
-              }}
-            >
-              <h4>Question {idx + 1}: {q.question}</h4>
-              {q.options.map((option, optIdx) => (
-                <div key={optIdx} className="quiz-option">
-                  <label>
-                    <input 
-                      type="radio" 
-                      name={`question-${idx}`}
-                      value={optIdx}
-                      onChange={() => setQuizAnswers({...quizAnswers, [idx]: optIdx})}
-                      disabled={quizResults !== null}
-                    />
-                    {option}
-                  </label>
-                </div>
-              ))}
-              {quizResults && (
-                <div className="quiz-explanation">
-                  <strong>Explanation:</strong> {q.explanation}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {!quizResults ? (
-            <button onClick={handleQuizSubmit} className="submit-quiz-button">
-              Submit Quiz
-            </button>
-          ) : (
-            <div className="quiz-results">
-              <h2>🎉 Results</h2>
-              <p className="score">
-                {quizResults.correct} / {quizResults.total} ({quizResults.percentage}%)
-              </p>
-              <p>
-                {quizResults.percentage >= 80 ? 
-                  "Great job! You're ready to move forward!" : 
-                  "Keep learning! Review the materials and try again."}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

@@ -50,10 +50,12 @@ export const onboardingAPI = {
     return response.data;
   },
 
+  // DEPRECATED: Use getQuiz instead (auto-generates if needed)
   // Generate quiz for the entire course
   generateCourseQuiz: async (configId, questionCount = 5) => {
-    const response = await api.get(`/api/onboarding/quiz/${configId}`, {
-      params: { question_count: questionCount }
+    // Redirect to new auto-generating endpoint
+    const response = await api.get(`/api/onboarding/configs/${configId}/quiz`, {
+      params: { auto_generate: true }
     });
     return response.data;
   },

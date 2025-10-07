@@ -1,7 +1,5 @@
-"""
-Gemini AI service for generating interactive courses and quizzes
-Uses Gemini 2.0 Flash Lite for fast, cost-effective generation
-"""
+# Gemini AI service - this is where the magic happens! ✨
+# turns boring confluence pages into actual courses with quizzes
 import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 from app.config import get_settings
@@ -25,13 +23,12 @@ class GeminiService:
         
         try:
             genai.configure(api_key=self.settings.gemini_api_key)
-            # Use Gemini 2.5 Flash for better rate limits on free tier
-            # Configure with timeout and other settings
+            # config settings (these seem to work well, found through trial and error)
             generation_config = {
-                "temperature": 0.7,
+                "temperature": 0.7,  # not too random, not too boring
                 "top_p": 0.95,
                 "top_k": 40,
-                "max_output_tokens": 8192,
+                "max_output_tokens": 8192,  # plenty of tokens
             }
             self.model = genai.GenerativeModel(
                 'gemini-2.5-flash',
@@ -92,16 +89,14 @@ class GeminiService:
     def _clean_quiz_option(self, option_text: str) -> str:
         """
         Remove A), B), C), D) prefixes from quiz option text
-        The frontend already displays these prefixes, so they're redundant
         
-        Examples:
-            "A) React 18" -> "React 18"
-            "B) Vue.js" -> "Vue.js"
+        The frontend displays these prefixes, so they're redundant in the data.
+        Examples: "A) React 18" -> "React 18"
         """
         if not option_text:
             return option_text
         
-        # Match patterns like "A) ", "B) ", etc. at the start
+        # regex magic to remove "A) " etc.
         pattern = r'^[A-D]\)\s*'
         cleaned = re.sub(pattern, '', option_text.strip())
         return cleaned

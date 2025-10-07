@@ -4,12 +4,9 @@ import ConfigEditor from './components/ConfigEditor';
 import Dashboard from './components/Dashboard';
 import './App.css';
 
-/**
- * Main app - handles navigation between config management, editing, and viewing
- * No more hardcoded roles, everything's file-based now!
- */
+// main app component - just handles which screen to show
 function App() {
-  const [view, setView] = useState('manager'); // 'manager', 'editor', 'dashboard'
+  const [view, setView] = useState('manager'); // manager, editor, or dashboard
   const [selectedConfigId, setSelectedConfigId] = useState(null);
   const [editingConfigId, setEditingConfigId] = useState(null);
 
@@ -29,7 +26,7 @@ function App() {
   };
 
   const handleSaveConfig = () => {
-    // After saving, go back to manager
+    // go back to list after saving
     setView('manager');
     setEditingConfigId(null);
   };

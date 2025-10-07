@@ -16,21 +16,62 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
     loadQuiz();
   }, [configId, moduleNumber]);
 
+  // keyboard shortcuts so people can spam A/B/C/D instead of clicking
+  // (way faster for taking quizzes, trust me)
+  useEffect(() => {
+    const handleKeyPress = (event) => {
+      // don't do anything if quiz isn't loaded or already submitted
+      if (!quiz || submitted) return;
+
+      const key = event.key.toUpperCase();
+      const currentQuestionData = quiz.questions[currentQuestion];
+      if (!currentQuestionData) return;
+
+      const numOptions = currentQuestionData.options.length;
+      let selectedIndex = null;
+
+      // A/B/C/D keys
+      if (key >= 'A' && key <= 'D') {
+        selectedIndex = key.charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+      }
+      // 1/2/3/4 keys also work
+      else if (key >= '1' && key <= '4') {
+        selectedIndex = parseInt(key) - 1;
+      }
+
+      // select it if it's a valid option
+      if (selectedIndex !== null && selectedIndex < numOptions) {
+        handleAnswerSelect(currentQuestion, selectedIndex);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);  // cleanup!
+  }, [quiz, submitted, currentQuestion, answers]);
+
   const loadQuiz = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Try to get existing quiz
+      // try to get quiz, or make it auto-generate if it doesn't exist yet
       try {
         const quizData = await onboardingAPI.getQuiz(configId, moduleNumber);
         setQuiz(quizData);
         setAnswers(new Array(quizData.total_questions).fill(null));
+        
+        // log if we just created it
+        if (quizData.generated_now) {
+          console.log('Quiz was generated on the fly!');
+        }
+        
         setLoading(false);
       } catch (err) {
-        // Quiz not generated yet
+        // Quiz couldn't be generated or loaded
         if (err.response?.status === 404) {
-          setError('Quiz not generated yet');
+          setError('Course not generated yet. Please generate the course first.');
+        } else if (err.response?.status === 500) {
+          setError(err.response?.data?.detail || 'Failed to generate quiz. Please try again.');
         } else {
           throw err;
         }
@@ -83,7 +124,7 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
   };
 
   const handleAnswerSelect = (questionIndex, optionIndex) => {
-    if (submitted) return; // Can't change answers after submission
+    if (submitted) return; // can't change answers after submitting!
 
     const newAnswers = [...answers];
     newAnswers[questionIndex] = optionIndex;
@@ -91,7 +132,7 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
   };
 
   const handleSubmit = async () => {
-    // Check if all questions are answered
+    // make sure they answered everything
     if (answers.some(a => a === null)) {
       alert('Please answer all questions before submitting.');
       return;
@@ -102,7 +143,7 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
       setResults(results);
       setSubmitted(true);
 
-      // Scroll to results
+      // scroll down to see results
       setTimeout(() => {
         document.querySelector('.quiz-results')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -113,6 +154,7 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
   };
 
   const handleRetry = () => {
+    // reset everything for another attempt
     setAnswers(new Array(quiz.total_questions).fill(null));
     setCurrentQuestion(0);
     setSubmitted(false);
@@ -133,6 +175,7 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
         <div className="quiz-loading">
           <div className="spinner"></div>
           <p>Loading quiz...</p>
+          <p className="loading-subtext">Checking for existing quiz or generating a new one...</p>
         </div>
       </div>
     );
@@ -141,54 +184,33 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
   if (error && !quiz) {
     return (
       <div className="quiz-container">
-        <div className="quiz-generate">
-          <div className="generate-header">
-            <h2>📝 Generate Quiz</h2>
+        <div className="quiz-error">
+          <div className="error-header">
+            <h2>⚠️ Quiz Not Available</h2>
             <button onClick={onClose} className="btn-close">×</button>
           </div>
 
-          <div className="generate-content">
-            <p>Create an AI-generated quiz to test your knowledge!</p>
-
-            <div className="quiz-options">
-              <div className="option-group">
-                <label>Number of Questions:</label>
-                <select id="num-questions" defaultValue="5">
-                  <option value="3">3 questions</option>
-                  <option value="5">5 questions (recommended)</option>
-                  <option value="7">7 questions</option>
-                  <option value="10">10 questions</option>
-                </select>
+          <div className="error-content">
+            <p className="error-message">{error}</p>
+            
+            {error.includes('Course not generated') ? (
+              <div className="error-actions">
+                <p>Please generate the course first, then come back for the quiz.</p>
+                <button onClick={onClose} className="btn-primary">
+                  Go Back to Course
+                </button>
               </div>
-
-              <div className="option-group">
-                <label>Difficulty:</label>
-                <select id="difficulty" defaultValue="medium">
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
+            ) : (
+              <div className="error-actions">
+                <p>Would you like to try loading the quiz again?</p>
+                <button onClick={loadQuiz} className="btn-primary">
+                  Retry Loading Quiz
+                </button>
+                <button onClick={onClose} className="btn-secondary">
+                  Go Back
+                </button>
               </div>
-
-              <button
-                onClick={() => {
-                  const numQuestions = parseInt(document.getElementById('num-questions').value);
-                  const difficulty = document.getElementById('difficulty').value;
-                  handleGenerateQuiz(numQuestions, difficulty);
-                }}
-                disabled={generating}
-                className="btn-primary btn-large"
-              >
-                {generating ? '🔄 Generating Quiz...' : '✨ Generate Quiz'}
-              </button>
-
-              {generating && (
-                <div className="generating-status">
-                  <div className="spinner"></div>
-                  <p>AI is creating your quiz questions... This may take 20-30 seconds.</p>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -226,6 +248,9 @@ const Quiz = ({ configId, moduleNumber = null, onClose, onComplete }) => {
                 className="progress-fill"
                 style={{ width: `${((currentQuestion + 1) / quiz.total_questions) * 100}%` }}
               ></div>
+            </div>
+            <div className="keyboard-hint">
+              ⌨️ Tip: Press A/B/C/D or 1/2/3/4 to select answers
             </div>
           </div>
 
