@@ -89,6 +89,23 @@ class GeminiService:
         # Clamp between 3 and 20 questions
         return max(3, min(20, optimal))
     
+    def _clean_quiz_option(self, option_text: str) -> str:
+        """
+        Remove A), B), C), D) prefixes from quiz option text
+        The frontend already displays these prefixes, so they're redundant
+        
+        Examples:
+            "A) React 18" -> "React 18"
+            "B) Vue.js" -> "Vue.js"
+        """
+        if not option_text:
+            return option_text
+        
+        # Match patterns like "A) ", "B) ", etc. at the start
+        pattern = r'^[A-D]\)\s*'
+        cleaned = re.sub(pattern, '', option_text.strip())
+        return cleaned
+    
     def _call_gemini_with_retry(self, prompt: str, max_retries: int = 3) -> Optional[str]:
         """
         Call Gemini API with retry logic and rate limiting
@@ -555,6 +572,14 @@ Return JSON array:
                     "explanation": "This course provides essential onboarding knowledge.",
                     "difficulty": difficulty
                 }]
+        
+        # Clean option prefixes (A), B), C), D)) from all questions
+        # The frontend already displays these, so they're redundant
+        for question in questions:
+            if 'options' in question:
+                question['options'] = [
+                    self._clean_quiz_option(opt) for opt in question['options']
+                ]
         
         quiz_data = {
             "course_id": course_id,
