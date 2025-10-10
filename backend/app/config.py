@@ -2,17 +2,17 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 class Settings(BaseSettings):
-    # Confluence settings
+    # Confluence stuff (the wiki where all the docs live)
     confluence_url: str
     confluence_user_email: str
-    confluence_api_token: str
+    confluence_api_token: str  # get this from your confluence profile
     
-    # Gemini API (for AI features)
+    # Google Gemini for AI magic ✨
     gemini_api_key: str = ""
     
-    # App settings
+    # Other settings
     environment: str = "development"
-    debug: bool = True
+    debug: bool = True  # always True because we're still figuring things out
     
     class Config:
         env_file = ".env"
@@ -20,8 +20,6 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings():
-    """
-    Using lru_cache so we don't load env vars every single time
-    Learned this from a senior dev review - apparently it's "best practice"
-    """
+    # lru_cache = fancy way to only load the .env file once
+    # (found this on stack overflow, seems to work great!)
     return Settings()

@@ -8,15 +8,15 @@ settings = get_settings()
 class ConfluenceService:
     """
     Service for talking to Confluence API
-    Now with support for reading linked pages and creating onboarding configs
+    
+    Handles fetching pages, searching, and dealing with folder structures.
     """
     
     def __init__(self):
-        # For Confluence Cloud, the REST API path is /wiki/rest/api
-        # But we need to be careful - some instances don't use /wiki prefix
+        # confluence URLs are confusing, some have /wiki some don't 🤷
         base = settings.confluence_url.rstrip('/')
         
-        # If URL already contains /wiki, don't add it again
+        # try not to double up the /wiki part
         if '/wiki' in base:
             self.base_url = f"{base}/rest/api"
         else:
@@ -28,7 +28,7 @@ class ConfluenceService:
         print(f"[Confluence] API initialized: {self.base_url}")
     
     def get_page_by_id(self, page_id: str) -> Optional[Dict]:
-        """Fetch a single page - pretty straightforward"""
+        """Fetch a single page from Confluence by ID"""
         url = f"{self.base_url}/content/{page_id}"
         params = {"expand": "body.storage,metadata.labels,space"}
         

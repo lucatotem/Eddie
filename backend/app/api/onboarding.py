@@ -363,54 +363,84 @@ async def get_course_summary(config_id: str):
         ]
     }
 
-@router.get("/quiz/{config_id}", response_model=QuizResponse)
+@router.get("/quiz/{config_id}", response_model=QuizResponse, deprecated=True)
 async def generate_course_quiz(config_id: str, question_count: int = 5):
     """
-    Generate quiz questions from the entire course
-    TODO: implement actual AI generation based on ALL source pages
+    DEPRECATED: Use GET /configs/{config_id}/quiz instead
+    
+    This endpoint is kept for backward compatibility but redirects to the new
+    auto-generating quiz endpoint. The new endpoint has better features:
+    - Auto-generates quiz if not found
+    - LLM-decided optimal question count
+    - Better error handling
     """
-    storage = get_storage()
-    config = storage.get(config_id)
+    # Redirect to new endpoint logic
+    quiz_data = gemini_service.get_quiz(config_id, module_number=None)
     
-    if not config:
-        raise HTTPException(status_code=404, detail="Config not found")
+    if not quiz_data:
+        # Auto-generate quiz using new system
+        try:
+            course_data = gemini_service.get_generated_course(config_id)
+            if not course_data:
+                # Fall back to old mock behavior for configs without generated courses
+                storage = get_storage()
+                config = storage.get(config_id)
+                
+                if not config:
+                    raise HTTPException(status_code=404, detail="Config not found")
+                
+                # Return empty quiz if test not enabled
+                if not config.settings.test_at_end:
+                    return QuizResponse(
+                        questions=[],
+                        page_title=config.name
+                    )
+                
+                # Return mock quiz for backward compatibility
+                mock_questions = [
+                    QuizQuestion(
+                        question="Based on the onboarding materials, what's the first thing you should do?",
+                        options=[
+                            "Read all the linked documentation",
+                            "Start coding immediately",
+                            "Ask for help on Slack",
+                            "Set up your environment"
+                        ],
+                        correct_answer=3,
+                        explanation="Always set up your environment first."
+                    )
+                ]
+                
+                return QuizResponse(
+                    questions=mock_questions[:question_count],
+                    page_title=config.name
+                )
+            
+            # Generate quiz using AI
+            quiz_data = gemini_service.generate_quiz(
+                course_id=config_id,
+                module_number=None,
+                num_questions=question_count if question_count else None,
+                difficulty="medium"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate quiz: {str(e)}"
+            )
     
-    # Check if quiz is enabled in settings
-    if not config.settings.test_at_end:
-        return QuizResponse(
-            questions=[],
-            page_title=config.name
-        )
-    
-    # Mock quiz - this should use AI to generate from actual content
-    mock_questions = [
-        QuizQuestion(
-            question="Based on the onboarding materials, what's the first thing you should do?",
-            options=[
-                "Read all the linked documentation",
-                "Start coding immediately",
-                "Ask for help on Slack",
-                "Set up your environment"
-            ],
-            correct_answer=3,
-            explanation="Always set up your environment first. The docs will tell you how."
-        ),
-        QuizQuestion(
-            question="What's covered in this onboarding course?",
-            options=[
-                "Only frontend concepts",
-                "Only backend concepts",
-                "Whatever the admin linked in the config",
-                "Random stuff from the internet"
-            ],
-            correct_answer=2,
-            explanation="The admin decides what you learn by linking relevant pages."
-        )
-    ]
-    
+    # Return quiz in old format for backward compatibility
     return QuizResponse(
-        questions=mock_questions[:question_count],
-        page_title=config_data["title"]
+        questions=[
+            QuizQuestion(
+                question=q["question"],
+                options=q["options"],
+                correct_answer=q["correct_answer"],
+                explanation=q["explanation"]
+            )
+            for q in quiz_data["questions"]
+        ],
+        page_title=quiz_data["quiz_title"]
     )
 
 
@@ -563,21 +593,64 @@ async def generate_quiz(config_id: str, request: QuizGenerateRequest, background
 
 
 @router.get("/configs/{config_id}/quiz")
-async def get_quiz(config_id: str, module_number: Optional[int] = None):
+async def get_quiz(config_id: str, module_number: Optional[int] = None, auto_generate: bool = True):
     """
     Get a generated quiz (without answers shown)
     Use module_number query param for module-specific quiz
+    If auto_generate=true and quiz doesn't exist, triggers generation automatically
     """
     quiz_data = gemini_service.get_quiz(config_id, module_number)
     
     if not quiz_data:
-        quiz_type = f"module {module_number}" if module_number else "final"
-        raise HTTPException(
-            status_code=404,
-            detail=f"Quiz for {quiz_type} not found. Generate it first."
-        )
+        # Quiz doesn't exist yet
+        if auto_generate:
+            # Check if course exists first
+            course_data = gemini_service.get_generated_course(config_id)
+            if not course_data:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Course not generated yet. Generate the course first."
+                )
+            
+            # Trigger quiz generation in background
+            try:
+                quiz_data = gemini_service.generate_quiz(
+                    course_id=config_id,
+                    module_number=module_number,
+                    num_questions=None,  # Auto-calculate
+                    difficulty="medium"
+                )
+                
+                # Return the newly generated quiz
+                return {
+                    "course_id": quiz_data["course_id"],
+                    "quiz_title": quiz_data["quiz_title"],
+                    "module_number": quiz_data.get("module_number"),
+                    "difficulty": quiz_data["difficulty"],
+                    "total_questions": quiz_data["total_questions"],
+                    "questions": [
+                        {
+                            "question": q["question"],
+                            "options": q["options"],
+                        }
+                        for q in quiz_data["questions"]
+                    ],
+                    "generated_now": True  # Flag to indicate fresh generation
+                }
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to generate quiz: {str(e)}"
+                )
+        else:
+            # Don't auto-generate, return 404
+            quiz_type = f"module {module_number}" if module_number else "final"
+            raise HTTPException(
+                status_code=404,
+                detail=f"Quiz for {quiz_type} not found. Generate it first."
+            )
     
-    # Return quiz without revealing correct answers
+    # Return existing quiz without revealing correct answers
     return {
         "course_id": quiz_data["course_id"],
         "quiz_title": quiz_data["quiz_title"],

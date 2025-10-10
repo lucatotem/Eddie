@@ -1,28 +1,36 @@
 .config-editor {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 2rem;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 3rem 2rem;
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  position: relative;
+  z-index: 1;
 }
 
 .config-editor h2 {
   margin-top: 0;
-  color: #172B4D;
+  color: #f8fafc;
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 2rem;
 }
 
 .config-editor h3 {
-  color: #172B4D;
+  color: #f8fafc;
   margin-top: 0;
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+  font-weight: 600;
 }
 
 .form-section {
-  margin-bottom: 2rem;
-  padding-bottom: 2rem;
-  border-bottom: 1px solid #EBECF0;
+  margin-bottom: 2.5rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .form-section:last-of-type {
@@ -31,106 +39,138 @@
 
 .config-editor label {
   display: block;
-  margin-bottom: 1rem;
-  color: #172B4D;
-  font-weight: 500;
+  margin-bottom: 1.5rem;
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 1rem;
 }
 
 .config-editor input[type="text"],
 .config-editor textarea {
   width: 100%;
-  padding: 0.5rem;
-  margin-top: 0.25rem;
-  border: 2px solid #DFE1E6;
-  border-radius: 4px;
+  padding: 0.875rem 1.25rem;
+  margin-top: 0.5rem;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
   font-size: 1rem;
   font-family: inherit;
+  color: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.config-editor input[type="text"]::placeholder,
+.config-editor textarea::placeholder {
+  color: #64748b;
 }
 
 .config-editor input[type="text"]:focus,
 .config-editor textarea:focus {
   outline: none;
-  border-color: #4C9AFF;
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(15, 23, 42, 0.7);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
 }
 
 .config-editor textarea {
   resize: vertical;
+  min-height: 120px;
+  line-height: 1.6;
 }
 
 /* Emoji and color pickers */
 .picker-row {
   display: flex;
-  gap: 2rem;
-  margin-top: 1rem;
+  gap: 3rem;
+  margin-top: 1.5rem;
 }
 
 .emoji-picker,
 .color-picker {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .emoji-picker button,
 .color-picker button {
-  width: 40px;
-  height: 40px;
-  border: 2px solid #DFE1E6;
-  border-radius: 4px;
-  background: white;
+  width: 50px;
+  height: 50px;
+  border: 2px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(10px);
   cursor: pointer;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .emoji-picker button:hover,
 .color-picker button:hover {
-  transform: scale(1.1);
-  border-color: #4C9AFF;
+  transform: scale(1.08);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
 }
 
 .emoji-picker button.selected,
 .color-picker button.selected {
-  border-color: #4C9AFF;
+  border-color: #f59e0b;
   border-width: 3px;
+  background: rgba(245, 158, 11, 0.15);
+  transform: scale(1.05);
 }
 
 /* Checkbox labels */
 .checkbox-label {
   display: flex !important;
   align-items: start;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: #F4F5F7;
-  border-radius: 4px;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.checkbox-label:hover {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .checkbox-label input[type="checkbox"] {
   margin-top: 0.25rem;
   cursor: pointer;
+  width: 20px;
+  height: 20px;
+  accent-color: #14b8a6;
 }
 
 .checkbox-label p {
-  margin: 0.25rem 0 0 0;
-  font-size: 0.9rem;
-  color: #6B778C;
+  margin: 0.5rem 0 0 0;
+  font-size: 0.95rem;
+  color: #cbd5e1;
   font-weight: normal;
+  line-height: 1.6;
 }
 
 .checkbox-label strong {
   display: block;
+  color: #e2e8f0;
+  font-size: 1.05rem;
 }
 
 /* Page adder */
 .page-adder {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .page-adder input {
@@ -139,18 +179,28 @@
 }
 
 .page-adder button {
-  padding: 0.5rem 1rem;
-  background: #4C9AFF;
-  color: white;
+  padding: 0.875rem 1.5rem;
+  background: #14b8a6;
+  color: #f8fafc;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.3);
+}
+
+.page-adder button:hover:not(:disabled) {
+  background: #0d9488;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.4);
 }
 
 .page-adder button:disabled {
-  background: #DFE1E6;
+  background: rgba(148, 163, 184, 0.15);
+  color: #64748b;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* Linked pages list */
@@ -164,87 +214,111 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem;
-  background: #F4F5F7;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  transition: all 0.2s ease;
+}
+
+.linked-pages-list li:hover {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .linked-pages-list li span {
-  font-family: monospace;
-  color: #172B4D;
+  font-family: 'Courier New', monospace;
+  color: #e2e8f0;
+  font-size: 0.95rem;
 }
 
 .linked-pages-list button {
-  background: none;
-  border: none;
-  color: #FF5630;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
   cursor: pointer;
   font-size: 1.2rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .linked-pages-list button:hover {
-  background: #FFEBE6;
-  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
 }
 
 /* Form actions */
 .form-actions {
   display: flex;
-  gap: 1rem;
+  gap: 1.25rem;
   justify-content: flex-end;
-  margin-top: 2rem;
+  margin-top: 2.5rem;
 }
 
 .form-actions button {
-  padding: 0.75rem 1.5rem;
+  padding: 0.875rem 1.75rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  letter-spacing: 0.2px;
 }
 
 .form-actions button.primary {
-  background: #0052CC;
-  color: white;
+  background: #f59e0b;
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
 }
 
 .form-actions button.primary:hover:not(:disabled) {
-  background: #0065FF;
+  background: #d97706;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 }
 
 .form-actions button.primary:disabled {
-  background: #DFE1E6;
+  background: rgba(148, 163, 184, 0.15);
+  color: #64748b;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .form-actions button:not(.primary) {
-  background: white;
-  border: 2px solid #DFE1E6;
-  color: #172B4D;
+  background: rgba(148, 163, 184, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
 }
 
 .form-actions button:not(.primary):hover {
-  background: #F4F5F7;
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.35);
+  transform: translateY(-1px);
 }
 
 /* Error message */
 .error-message {
-  background: #FFEBE6;
-  border: 1px solid #FF5630;
-  color: #BF2600;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+  background: rgba(239, 68, 68, 0.12);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 1.25rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
 }
 
 /* Hint text */
 .hint {
-  font-size: 0.9rem;
-  color: #6B778C;
-  margin-top: -0.5rem;
-  margin-bottom: 1rem;
+  font-size: 0.95rem;
+  color: #94a3b8;
+  margin-top: 0.5rem;
+  margin-bottom: 1.25rem;
+  line-height: 1.6;
 }

@@ -1,70 +1,92 @@
 .config-manager {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 3rem 2rem;
+  position: relative;
+  z-index: 1;
 }
 
 .config-manager h1 {
-  color: #172B4D;
-  margin-bottom: 0.5rem;
+  color: #f8fafc;
+  margin-bottom: 0.75rem;
+  font-size: 2.5rem;
+  font-weight: 700;
 }
 
 .subtitle {
-  color: #6B778C;
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
+  color: #94a3b8;
+  font-size: 1.15rem;
+  margin-bottom: 3rem;
+  letter-spacing: 0.3px;
 }
 
 .config-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 2rem;
 }
 
 .config-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(20px);
+  padding: 2rem;
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.2s;
-  border-left: 4px solid #4C9AFF;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-left: 3px solid #f59e0b;
   position: relative;
+  animation: fadeInScale 0.5s ease backwards;
 }
 
 .config-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(30, 41, 59, 0.7);
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Create new card styling */
 .config-card.create-new {
-  border-left-color: #36B37E;
-  background: linear-gradient(135deg, #f5f5f5 0%, #e8f5e9 100%);
+  border-left-color: #14b8a6;
+  background: rgba(20, 184, 166, 0.08);
+  backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
+  min-height: 250px;
+  border: 1px solid rgba(20, 184, 166, 0.2);
 }
 
 .config-card.create-new:hover {
-  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-}
-
-.config-card.create-new .card-emoji {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.4);
+  box-shadow: 0 12px 32px rgba(20, 184, 166, 0.2);
 }
 
 .config-card.create-new h3 {
-  color: #36B37E;
+  color: #14b8a6;
   margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .config-card.create-new p {
-  color: #6B778C;
-  margin: 0.5rem 0 0 0;
+  color: #94a3b8;
+  margin: 0.75rem 0 0 0;
+  font-size: 1rem;
 }
 
 /* Card header with emoji and delete button */
@@ -72,40 +94,43 @@
   display: flex;
   justify-content: space-between;
   align-items: start;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .card-emoji {
-  font-size: 2.5rem;
+  font-size: 3rem;
 }
 
 .delete-btn {
-  background: none;
-  border: none;
+  background: rgba(148, 163, 184, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   cursor: pointer;
   font-size: 1.2rem;
-  padding: 0.25rem 0.5rem;
-  opacity: 0.5;
-  transition: all 0.2s;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  color: #94a3b8;
 }
 
 .delete-btn:hover {
-  opacity: 1;
-  background: #FFEBE6;
-  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
 }
 
 .config-card h3 {
-  margin: 0 0 0.5rem 0;
-  color: #172B4D;
-  font-size: 1.2rem;
+  margin: 0 0 1rem 0;
+  color: #f8fafc;
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .card-instructions {
-  color: #6B778C;
-  margin: 0 0 1rem 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  color: #cbd5e1;
+  margin: 0 0 1.5rem 0;
+  font-size: 0.975rem;
+  line-height: 1.7;
   /* Truncate long text */
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -117,44 +142,55 @@
 .card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .card-meta span {
-  background: #F4F5F7;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  color: #172B4D;
+  background: rgba(148, 163, 184, 0.15);
+  backdrop-filter: blur(5px);
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #e2e8f0;
+  font-weight: 500;
+  border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .card-date {
-  color: #97A0AF;
-  font-size: 0.85rem;
-  margin: 0.5rem 0 0 0;
+  color: #64748b;
+  font-size: 0.875rem;
+  margin: 0.75rem 0 0 0;
+  font-weight: 500;
 }
 
 /* Error state */
 .error {
-  color: #BF2600;
-  background: #FFEBE6;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  backdrop-filter: blur(10px);
+  padding: 1.25rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .config-manager button {
-  padding: 0.75rem 1.5rem;
-  background: #0052CC;
-  color: white;
+  padding: 0.875rem 1.75rem;
+  background: #f59e0b;
+  color: #0f172a;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+  letter-spacing: 0.2px;
 }
 
 .config-manager button:hover {
-  background: #0065FF;
+  background: #d97706;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
 }

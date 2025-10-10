@@ -1,7 +1,5 @@
-"""
-Gemini AI service for generating interactive courses and quizzes
-Uses Gemini 2.0 Flash Lite for fast, cost-effective generation
-"""
+# Gemini AI service - this is where the magic happens! ✨
+# turns boring confluence pages into actual courses with quizzes
 import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 from app.config import get_settings
@@ -25,8 +23,17 @@ class GeminiService:
         
         try:
             genai.configure(api_key=self.settings.gemini_api_key)
-            # Use Gemini 2.5 Flash for better rate limits on free tier
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            # config settings (these seem to work well, found through trial and error)
+            generation_config = {
+                "temperature": 0.7,  # not too random, not too boring
+                "top_p": 0.95,
+                "top_k": 40,
+                "max_output_tokens": 8192,  # plenty of tokens
+            }
+            self.model = genai.GenerativeModel(
+                'gemini-2.5-flash',
+                generation_config=generation_config
+            )
             print("[Gemini] Model initialized: gemini-2.5-flash")
         except Exception as e:
             print(f"[Gemini] Error initializing model: {e}")
@@ -78,6 +85,21 @@ class GeminiService:
         
         # Clamp between 3 and 20 questions
         return max(3, min(20, optimal))
+    
+    def _clean_quiz_option(self, option_text: str) -> str:
+        """
+        Remove A), B), C), D) prefixes from quiz option text
+        
+        The frontend displays these prefixes, so they're redundant in the data.
+        Examples: "A) React 18" -> "React 18"
+        """
+        if not option_text:
+            return option_text
+        
+        # regex magic to remove "A) " etc.
+        pattern = r'^[A-D]\)\s*'
+        cleaned = re.sub(pattern, '', option_text.strip())
+        return cleaned
     
     def _call_gemini_with_retry(self, prompt: str, max_retries: int = 3) -> Optional[str]:
         """
@@ -191,31 +213,30 @@ class GeminiService:
         # Step 3: Generate module breakdown using AI
         content_summary = self._create_content_summary(pages_content)
         
-        module_breakdown_prompt = f"""You are an expert instructional designer creating an engaging onboarding course.
+        # Limit summary size to avoid timeouts
+        if len(content_summary) > 2000:
+            summary_lines = content_summary.split('\n')[:20]  # Keep first 20 pages
+            content_summary = '\n'.join(summary_lines) + f"\n... ({len(pages_content)} total pages)"
+        
+        module_breakdown_prompt = f"""Create course modules from this content.
 
-Course Title: {course_title}
-Course Description: {course_description}
+Course: {course_title}
+Description: {course_description}
 
-Available Content Summary:
+Content Summary:
 {content_summary}
 
-Create a structured course outline with {num_modules} modules. Each module should:
-1. Have a clear, engaging title
-2. Cover a specific topic or concept
-3. Build progressively from basics to advanced
-4. Be practical and actionable
+Analyze and decide optimal module count based on content amount and complexity.
 
-Return ONLY a JSON array with this structure:
+Return JSON array:
 [
   {{
     "module_number": 1,
     "title": "Module title",
-    "description": "What this module covers",
-    "topics": ["topic1", "topic2", "topic3"]
+    "description": "What this covers",
+    "topics": ["topic1", "topic2"]
   }}
-]
-
-Do not include any markdown formatting or explanation, just the JSON array."""
+]"""
 
         response_text = self._call_gemini_with_retry(module_breakdown_prompt)
         module_structure = None
@@ -297,43 +318,40 @@ Do not include any markdown formatting or explanation, just the JSON array."""
         search_results = vector_store.search_similar(
             course_id=course_id,
             query=module_query,
-            n_results=10  # Top 10 most relevant chunks for this module
+            n_results=5  # Reduced to 5 to avoid timeout - more focused content
         )
         
         # Combine relevant chunks
         relevant_content = "\n\n".join([result["text"] for result in search_results])
         
+        # Reduce content size to avoid timeouts - keep it under 3000 chars
+        content_for_prompt = relevant_content[:3000]
+        
         # Generate engaging module content
-        content_prompt = f"""You are creating onboarding content based on existing documentation.
+        content_prompt = f"""Create onboarding content from this documentation.
 
-Module Title: {module_info['title']}
-Module Description: {module_info['description']}
+Module: {module_info['title']}
+Description: {module_info['description']}
 
-SOURCE DOCUMENTATION (use this as your PRIMARY source):
-{relevant_content[:5000]}
+SOURCE DOCUMENTATION:
+{content_for_prompt}
 
-IMPORTANT: 
-- Base your content DIRECTLY on the source documentation above
-- Quote and reference specific details from the source
-- DO NOT add generic information not found in the source
-- Keep the technical accuracy of the original documentation
-- Make it readable and well-organized, but stay faithful to the source
+INSTRUCTIONS: 
+- Use ONLY the source documentation above
+- Break content into bite-sized facts 
+- One concept per fact
+- Include ALL important information
 
-Create a well-structured module that:
-1. Provides a brief overview based on the source material
-2. Presents the key information from the documentation clearly
-3. Uses actual examples from the source when available
-4. Highlights important takeaways from the documentation
-
-Return ONLY a JSON object with this structure:
+Return JSON:
 {{
-  "overview": "Brief introduction based on source material",
-  "content": "Main content in markdown format, BASED ON SOURCE DOCUMENTATION",
-  "key_points": ["actual point 1 from source", "actual point 2 from source", "actual point 3 from source"],
-  "takeaways": ["actual takeaway 1 from source", "actual takeaway 2 from source"]
-}}
-
-Do not include any markdown formatting around the JSON, just the JSON object."""
+  "overview": "Brief intro (2-3 sentences)",
+  "facts": [
+    "First fact from source",
+    "Second fact from source"
+  ],
+  "key_points": ["point 1", "point 2"],
+  "takeaways": ["takeaway 1", "takeaway 2"]
+}}"""
 
         response_text = self._call_gemini_with_retry(content_prompt)
         module_content = None
@@ -357,8 +375,12 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
                 else:
                     break
             
-            # Format the content nicely
-            formatted_content = "\n\n".join(chunks_to_use)
+            # Break content into fact cards (split by sentences or paragraphs)
+            facts = []
+            for chunk in chunks_to_use:
+                # Split by periods to get individual facts
+                sentences = [s.strip() for s in chunk.split('.') if len(s.strip()) > 20]
+                facts.extend(sentences[:10])  # Limit per chunk
             
             # Extract key points from topics
             topics = module_info.get("topics", [])
@@ -366,7 +388,7 @@ Do not include any markdown formatting around the JSON, just the JSON object."""
             
             module_content = {
                 "overview": module_info["description"],
-                "content": formatted_content if formatted_content else "Please refer to the source documentation for detailed information.",
+                "facts": facts if facts else ["Please refer to the source documentation for detailed information."],
                 "key_points": key_points,
                 "takeaways": [
                     f"Understanding {module_info['title']}",
@@ -478,40 +500,30 @@ Course Title: {course_data['title']}
 Quiz Topic: {quiz_title}
 Difficulty Level: {difficulty}
 
-Content to Quiz On:
-{json.dumps(quiz_content, indent=2)[:3000]}
+Content:
+{json.dumps(quiz_content, indent=2)[:2000]}
 
-Additional Source Material:
-{source_content[:3000]}
+Source:
+{source_content[:2000]}
 
-Create {num_questions} comprehensive multiple-choice questions that:
-1. Test understanding of the MOST IMPORTANT concepts and key information
-2. Are clear, specific, and unambiguous
-3. Have 4 answer options each (one correct, three plausible distractors)
-4. Include detailed explanations for the correct answer
-5. Match the {difficulty} difficulty level
-6. Cover different aspects of the content (don't repeat topics)
-7. Focus on practical application and real understanding, not just memorization
-8. Are directly based on the source material provided
+Create optimal number of questions based on content depth.
 
-IMPORTANT: 
-- Quality over quantity - each question should test critical knowledge
-- Avoid trivial or overly specific details
-- Questions should help verify the learner truly understands the material
-- Make distractors realistic but clearly incorrect to someone who learned the material
+Requirements:
+- Test key concepts
+- 4 options each (1 correct, 3 distractors)
+- Include explanations
+- {difficulty} difficulty
 
-Return ONLY a JSON array with this structure:
+Return JSON array:
 [
   {{
-    "question": "The question text (clear and specific)",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "question": "Question text",
+    "options": ["A", "B", "C", "D"],
     "correct_answer": 0,
-    "explanation": "Detailed explanation of why this is correct and what concept it tests",
+    "explanation": "Why this is correct",
     "difficulty": "{difficulty}"
   }}
-]
-
-Do not include any markdown formatting or explanation, just the JSON array."""
+]"""
 
         response_text = self._call_gemini_with_retry(quiz_prompt)
         questions = None
@@ -555,6 +567,14 @@ Do not include any markdown formatting or explanation, just the JSON array."""
                     "explanation": "This course provides essential onboarding knowledge.",
                     "difficulty": difficulty
                 }]
+        
+        # Clean option prefixes (A), B), C), D)) from all questions
+        # The frontend already displays these, so they're redundant
+        for question in questions:
+            if 'options' in question:
+                question['options'] = [
+                    self._clean_quiz_option(opt) for opt in question['options']
+                ]
         
         quiz_data = {
             "course_id": course_id,
